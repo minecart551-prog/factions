@@ -183,7 +183,7 @@ public class Config {
 
     @SerializedName("wildernessPermissions")
     public List<Relationship.Permissions> WILDERNESS_PERMISSIONS =
-            List.of(Relationship.Permissions.USE_BLOCKS, Relationship.Permissions.USE_ENTITIES, Relationship.Permissions.ATTACK_MOBS);
+            List.of(Relationship.Permissions.USE_BLOCKS, Relationship.Permissions.USE_ENTITIES);
 
     @SerializedName("wildernessRestrictedDimensions")
     public List<String> WILDERNESS_RESTRICTED_DIMENSIONS = List.of("minecraft:overworld");
