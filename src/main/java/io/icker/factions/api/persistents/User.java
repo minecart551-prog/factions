@@ -9,9 +9,7 @@ import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import io.icker.factions.FactionsMod;
 import io.icker.factions.api.events.FactionEvents;
-import io.icker.factions.config.PowerConfig;
 import io.icker.factions.database.Database;
 import io.icker.factions.database.Field;
 import io.icker.factions.database.Name;
@@ -53,16 +51,9 @@ public class User {
     @Field("HomeCooldown")
     public long homeCooldown = -1;
 
-    @Field("LastSeen")
-    public long lastSeen = System.currentTimeMillis();
-
-    @Field("Power")
-    private int power = -1;
-
     public boolean autoclaim = false;
     public boolean bypass = false;
     public String language = "en_us";
-    public String lastTerritoryKey = null; // transient: not persisted, tracks territory for entry/exit notifications
 
     private User spoof;
 
@@ -144,44 +135,6 @@ public class User {
         factionID = null;
         rank = null;
         FactionEvents.MEMBER_LEAVE.invoker().onMemberLeave(Faction.get(oldFactionID), this);
-    }
-
-    public int getMaxPower() {
-        return FactionsMod.CONFIG.POWER.MEMBER;
-    }
-
-    public int getPower() {
-        if (power < 0) return getMaxPower();
-        return Math.min(power, getMaxPower());
-    }
-
-    public int adjustPower(int amount) {
-        int maxPower = getMaxPower();
-        int currentPower = getPower();
-        int newPower = Math.min(Math.max(0, currentPower + amount), maxPower);
-
-        if (newPower == currentPower) return 0;
-
-        power = newPower;
-        return Math.abs(newPower - currentPower);
-    }
-
-    public double getActivityMultiplier() {
-        if (lastSeen == 0) return 1.0;
-
-        long now = System.currentTimeMillis();
-        long inactiveDays = (now - lastSeen) / (1000L * 60 * 60 * 24);
-
-        PowerConfig.InactivityTier[] tiers = FactionsMod.CONFIG.POWER.INACTIVITY_TIERS;
-        if (tiers == null || tiers.length == 0) return 1.0;
-
-        double multiplier = 1.0;
-        for (PowerConfig.InactivityTier tier : tiers) {
-            if (inactiveDays >= tier.DAYS) {
-                multiplier = tier.MULTIPLIER;
-            }
-        }
-        return multiplier;
     }
 
     public static Collection<User> all() {

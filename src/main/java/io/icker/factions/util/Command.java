@@ -16,7 +16,6 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.UserCache;
 
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -167,26 +166,8 @@ public interface Command {
             return (context, builder) -> {
                 ServerPlayerEntity entity = context.getSource().getPlayerOrThrow();
                 User user = User.get(entity.getUuid());
-
-                // For greedyString arguments, builder.getStart() is positioned at the END of
-                // the parsed input (because greedyString consumes everything), making
-                // builder.getRemaining() return "" and causing all suggestions to always show.
-                // Fix: find the actual start of the last argument from the parsed context nodes.
-                int argStart = builder.getStart();
-                for (com.mojang.brigadier.context.ParsedCommandNode<?> node : context.getNodes()) {
-                    if (node.getNode() instanceof com.mojang.brigadier.tree.ArgumentCommandNode) {
-                        argStart = node.getRange().getStart();
-                    }
-                }
-
-                String remaining = builder.getInput()
-                        .substring(Math.min(argStart, builder.getInput().length()))
-                        .toLowerCase(Locale.ROOT);
-
                 for (String suggestion : sug.run(user)) {
-                    if (suggestion.toLowerCase(Locale.ROOT).startsWith(remaining)) {
-                        builder.suggest(suggestion);
-                    }
+                    builder.suggest(suggestion);
                 }
                 return builder.buildFuture();
             };

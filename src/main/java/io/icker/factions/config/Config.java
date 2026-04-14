@@ -28,8 +28,6 @@ public class Config {
                 .registerTypeAdapter(HomeConfig.class, new Deserializer<>(HomeConfig.class))
                 .registerTypeAdapter(PowerConfig.class, new Deserializer<>(PowerConfig.class))
                 .registerTypeAdapter(SafeConfig.class, new Deserializer<>(SafeConfig.class))
-                .registerTypeAdapter(VassalConfig.class, new Deserializer<>(VassalConfig.class))
-                .registerTypeAdapter(GodsConfig.class, new Deserializer<>(GodsConfig.class))
                 .create();
 
         try {
@@ -58,22 +56,6 @@ public class Config {
 
             if (config.DISPLAY == null) {
                 config.DISPLAY = defaults.DISPLAY;
-            } else {
-                if (config.DISPLAY.TERRITORY_NOTIFICATION == null) {
-                    config.DISPLAY.TERRITORY_NOTIFICATION = defaults.DISPLAY.TERRITORY_NOTIFICATION;
-                }
-            }
-
-            if (config.VASSAL == null) {
-                config.VASSAL = defaults.VASSAL;
-            }
-
-            if (config.GODS == null) {
-                config.GODS = defaults.GODS;
-            }
-
-            if (config.BLUEMAP == null) {
-                config.BLUEMAP = defaults.BLUEMAP;
             }
 
             if (config.VERSION != REQUIRED_VERSION) {
@@ -99,8 +81,6 @@ public class Config {
                     .registerTypeAdapter(HomeConfig.class, new Deserializer<>(HomeConfig.class))
                     .registerTypeAdapter(PowerConfig.class, new Deserializer<>(PowerConfig.class))
                     .registerTypeAdapter(SafeConfig.class, new Deserializer<>(SafeConfig.class))
-                    .registerTypeAdapter(VassalConfig.class, new Deserializer<>(VassalConfig.class))
-                    .registerTypeAdapter(GodsConfig.class, new Deserializer<>(GodsConfig.class))
                     .create();
 
             FileWriter writer = new FileWriter(file);
@@ -118,9 +98,6 @@ public class Config {
 
     @SerializedName("version")
     public int VERSION = REQUIRED_VERSION;
-
-    @SerializedName("_comment_blockTNT")
-    public String _COMMENT_BLOCK_TNT = "Whether TNT explosions are blocked in claimed territory";
 
     @SerializedName("blockTNT")
     public boolean BLOCK_TNT = false;
@@ -142,74 +119,17 @@ public class Config {
     @SerializedName("relationships")
     public RelationshipConfig RELATIONSHIPS = new RelationshipConfig();
 
-    @SerializedName("vassal")
-    public VassalConfig VASSAL = new VassalConfig();
-
-    @SerializedName("gods")
-    public GodsConfig GODS = new GodsConfig();
-
-    @SerializedName("bluemap")
-    public BlueMapConfig BLUEMAP = new BlueMapConfig();
-
-    @SerializedName("_comment_maxFactionSize")
-    public String _COMMENT_MAX_FACTION_SIZE = "Maximum members per faction (-1 = unlimited)";
-
     @SerializedName("maxFactionSize")
     public int MAX_FACTION_SIZE = -1;
-
-    @SerializedName("_comment_friendlyFire")
-    public String _COMMENT_FRIENDLY_FIRE = "Whether faction members can damage each other";
 
     @SerializedName("friendlyFire")
     public boolean FRIENDLY_FIRE = false;
 
-    @SerializedName("_comment_requiredBypassLevel")
-    public String _COMMENT_REQUIRED_BYPASS_LEVEL = "Permission level required for admin commands (0-4)";
-
     @SerializedName("requiredBypassLevel")
     public int REQUIRED_BYPASS_LEVEL = 2;
 
-    @SerializedName("_comment_claimProtections")
-    public String _COMMENT_CLAIM_PROTECTION = "Whether claimed chunks are protected from non-members";
-
     @SerializedName("claimProtections")
     public boolean CLAIM_PROTECTION = true;
-
-    @SerializedName("_comment_restrictedWilderness")
-    public String _COMMENT_RESTRICTED_WILDERNESS = "When enabled, unclaimed wilderness follows wildernessPermissions instead of being fully open";
-
-    @SerializedName("restrictedWilderness")
-    public boolean RESTRICTED_WILDERNESS = false;
-
-    @SerializedName("wildernessPermissions")
-    public List<Relationship.Permissions> WILDERNESS_PERMISSIONS =
-            List.of(Relationship.Permissions.USE_BLOCKS, Relationship.Permissions.USE_ENTITIES);
-
-    @SerializedName("wildernessRestrictedDimensions")
-    public List<String> WILDERNESS_RESTRICTED_DIMENSIONS = List.of("minecraft:overworld");
-
-    public static class TerritoryNotificationConfig {
-        @SerializedName("chat")
-        public boolean CHAT = false;
-
-        @SerializedName("actionBar")
-        public boolean ACTION_BAR = false;
-
-        @SerializedName("title")
-        public boolean TITLE = true;
-
-        @SerializedName("_comment_titleFade")
-        public String _COMMENT_TITLE_FADE = "Title animation durations in ticks (20 ticks = 1 second)";
-
-        @SerializedName("titleFadeIn")
-        public int TITLE_FADE_IN = 10;
-
-        @SerializedName("titleStay")
-        public int TITLE_STAY = 50;
-
-        @SerializedName("titleFadeOut")
-        public int TITLE_FADE_OUT = 20;
-    }
 
     public static class DisplayConfig {
         @SerializedName("factionNameMaxLength")
@@ -226,12 +146,6 @@ public class Config {
 
         @SerializedName("powerMessage")
         public boolean POWER_MESSAGE = true;
-
-        @SerializedName("_comment_territoryNotification")
-        public String _COMMENT_TERRITORY_NOTIFICATION = "Territory entry/exit notifications: chat, actionBar and title can be enabled independently";
-
-        @SerializedName("territoryNotification")
-        public TerritoryNotificationConfig TERRITORY_NOTIFICATION = new TerritoryNotificationConfig();
     }
 
     public static class RelationshipConfig {
@@ -244,20 +158,6 @@ public class Config {
 
         @SerializedName("compatSkillDamageProtectionfor")
         public compatSkillDamageProtectionfor COMPAT_SKILL_DAMAGE_PROTECTION_FOR = compatSkillDamageProtectionfor.NEUTRAL;
-    }
-
-    public static class BlueMapConfig {
-        @SerializedName("_comment_markerMinY")
-        public String _COMMENT_MARKER_MIN_Y = "Minimum Y value for extruded claim markers on BlueMap";
-
-        @SerializedName("markerMinY")
-        public int MARKER_MIN_Y = -64;
-
-        @SerializedName("_comment_markerMaxY")
-        public String _COMMENT_MARKER_MAX_Y = "Maximum Y value for extruded claim markers on BlueMap";
-
-        @SerializedName("markerMaxY")
-        public int MARKER_MAX_Y = 320;
     }
 
     public static class Deserializer<T> implements JsonDeserializer<T> {

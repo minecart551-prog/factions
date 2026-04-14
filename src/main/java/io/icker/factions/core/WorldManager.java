@@ -5,13 +5,8 @@ import io.icker.factions.api.events.MiscEvents;
 import io.icker.factions.api.events.PlayerEvents;
 import io.icker.factions.api.persistents.Claim;
 import io.icker.factions.api.persistents.Faction;
-import io.icker.factions.api.persistents.Relationship;
 import io.icker.factions.api.persistents.User;
-import io.icker.factions.config.Config.TerritoryNotificationConfig;
 import io.icker.factions.util.Message;
-import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
-import net.minecraft.network.packet.s2c.play.TitleFadeS2CPacket;
-import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Formatting;
@@ -54,85 +49,13 @@ public class WorldManager {
                         player.getName().getString()).send(faction);
             }
         }
-
-        String currentKey = claim != null ? claim.factionID.toString() : "wilderness";
-        if (user.lastTerritoryKey == null) {
-            user.lastTerritoryKey = currentKey;
-        } else if (!currentKey.equals(user.lastTerritoryKey)) {
-            user.lastTerritoryKey = currentKey;
-            notifyTerritoryChange(player, claim);
-        }
-
         if (user.radar) {
             if (claim != null) {
                 new Message(claim.getFaction().getName()).format(claim.getFaction().getColor())
                         .send(player, true);
             } else {
-                new Message("Wilderness").format(Formatting.GRAY).send(player, true);
+                new Message("Wilderness").format(Formatting.GREEN).send(player, true);
             }
-        }
-    }
-
-    private static void notifyTerritoryChange(ServerPlayerEntity player, Claim claim) {
-        TerritoryNotificationConfig notif = FactionsMod.CONFIG.DISPLAY.TERRITORY_NOTIFICATION;
-        if (notif == null) return;
-
-        Message nameMessage;
-        Message statusMessage = null;
-
-        if (claim != null) {
-            Faction claimFaction = claim.getFaction();
-            Formatting color;
-            String label;
-
-            User user = User.get(player.getUuid());
-            if (!user.isInFaction()) {
-                color = Formatting.GRAY;
-                label = "Neutral";
-            } else {
-                Faction userFaction = user.getFaction();
-                if (userFaction.getID().equals(claimFaction.getID())) {
-                    color = Formatting.WHITE;
-                    label = "Your territory";
-                } else {
-                    Relationship.Status status = claimFaction.getRelationship(userFaction.getID()).status;
-                    color = switch (status) {
-                        case ALLY -> Formatting.GREEN;
-                        case FRIENDLY -> Formatting.AQUA;
-                        case ENEMY -> Formatting.RED;
-                        default -> Formatting.GRAY;
-                    };
-                    label = switch (status) {
-                        case ALLY -> "Ally";
-                        case FRIENDLY -> "Friendly";
-                        case ENEMY -> "Enemy";
-                        default -> "Neutral";
-                    };
-                }
-            }
-
-            nameMessage = new Message(claimFaction.getName()).format(claimFaction.getColor());
-            statusMessage = new Message(label).format(color);
-        } else {
-            nameMessage = new Message("Wilderness").format(Formatting.GRAY);
-        }
-
-        if (notif.CHAT) {
-            Message msg = new Message("Entering ").add(nameMessage);
-            if (statusMessage != null) msg.add(", ").add(statusMessage);
-            msg.send(player, false);
-        }
-        if (notif.ACTION_BAR) {
-            Message msg = new Message("Entering ").add(nameMessage);
-            if (statusMessage != null) msg.add(", ").add(statusMessage);
-            msg.send(player, true);
-        }
-        if (notif.TITLE) {
-            player.networkHandler.sendPacket(new TitleFadeS2CPacket(notif.TITLE_FADE_IN, notif.TITLE_STAY, notif.TITLE_FADE_OUT));
-            player.networkHandler.sendPacket(new TitleS2CPacket(nameMessage.raw()));
-            player.networkHandler.sendPacket(new SubtitleS2CPacket(
-                statusMessage != null ? statusMessage.raw() : new Message("").raw()
-            ));
         }
     }
 }

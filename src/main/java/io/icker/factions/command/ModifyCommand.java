@@ -1,7 +1,6 @@
 package io.icker.factions.command;
 
 import java.util.Locale;
-import java.util.regex.Pattern;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -18,19 +17,11 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.Formatting;
 
 public class ModifyCommand implements Command {
-    private static final Pattern ILLEGAL_NAME_CHARS = Pattern.compile("[*\"\\\\§]");
-
     private int name(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         String name = StringArgumentType.getString(context, "name");
 
         ServerCommandSource source = context.getSource();
         ServerPlayerEntity player = source.getPlayerOrThrow();
-
-        if (ILLEGAL_NAME_CHARS.matcher(name).find()) {
-            new Message("Faction name cannot contain special characters: * \" \\ §").fail()
-                    .send(player, false);
-            return 0;
-        }
 
         if (FactionsMod.CONFIG.DISPLAY.NAME_BLACKLIST.contains(name.toLowerCase(Locale.ROOT))) {
             new Message("Cannot rename a faction to that name as it is on the blacklist").fail()

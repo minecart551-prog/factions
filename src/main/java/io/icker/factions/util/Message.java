@@ -54,12 +54,6 @@ public class Message {
         return this;
     }
 
-    public Message hover(Text hoverText) {
-        text.styled(s -> s
-                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverText)));
-        return this;
-    }
-
     public Message click(String message) {
         text.styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, message)));
         return this;

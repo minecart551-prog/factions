@@ -17,7 +17,6 @@ import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.fluid.Fluid;
 import net.minecraft.fluid.Fluids;
@@ -284,19 +283,12 @@ public class InteractionManager {
         ChunkPos chunkPosition = world.getChunk(position).getPos();
 
         Claim claim = Claim.get(chunkPosition.x, chunkPosition.z, dimension);
-        if (claim == null) {
-            if (FactionsMod.CONFIG.RESTRICTED_WILDERNESS
-                    && FactionsMod.CONFIG.WILDERNESS_RESTRICTED_DIMENSIONS.contains(dimension)) {
-                return FactionsMod.CONFIG.WILDERNESS_PERMISSIONS.contains(permission)
-                        ? ActionResult.PASS
-                        : ActionResult.FAIL;
-            }
+        if (claim == null)
             return ActionResult.PASS;
-        }
 
         Faction claimFaction = claim.getFaction();
 
-        if (!claimFaction.isAdminProtected() && claimFaction.getClaims().size() * FactionsMod.CONFIG.POWER.CLAIM_WEIGHT > claimFaction
+        if (claimFaction.getClaims().size() * FactionsMod.CONFIG.POWER.CLAIM_WEIGHT > claimFaction
                 .getPower()) {
             return ActionResult.PASS;
         }

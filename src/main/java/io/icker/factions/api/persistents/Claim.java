@@ -32,16 +32,12 @@ public class Claim {
     @Field("AccessLevel")
     public Rank accessLevel;
 
-    @Field("ClaimedAt")
-    public long claimedAt;
-
     public Claim(int x, int z, String level, UUID factionID) {
         this.x = x;
         this.z = z;
         this.level = level;
         this.factionID = factionID;
         this.accessLevel = Rank.MEMBER;
-        this.claimedAt = System.currentTimeMillis();
     }
 
     public Claim() {}

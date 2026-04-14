@@ -38,11 +38,6 @@ public class HomeCommand implements Command {
     }
 
     public int execGo(ServerPlayerEntity player, User user, Faction faction) {
-        if (!FactionsMod.CONFIG.HOME.WARP_ENABLED) {
-            new Message("Home warp is disabled").fail().send(player, false);
-            return 0;
-        }
-
         Home home = faction.getHome();
 
         if (home == null) {

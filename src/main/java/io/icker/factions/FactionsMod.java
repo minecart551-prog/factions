@@ -1,19 +1,15 @@
 package io.icker.factions;
 
-import java.util.UUID;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.tree.LiteralCommandNode;
-import io.icker.factions.api.persistents.Faction;
-import io.icker.factions.api.persistents.User;
 import io.icker.factions.command.AdminCommand;
 import io.icker.factions.command.ClaimCommand;
 import io.icker.factions.command.CompatCommand;
 import io.icker.factions.command.CreateCommand;
 import io.icker.factions.command.DeclareCommand;
 import io.icker.factions.command.DisbandCommand;
-import io.icker.factions.command.GodsCommand;
 import io.icker.factions.command.HomeCommand;
 import io.icker.factions.command.InfoCommand;
 import io.icker.factions.command.InviteCommand;
@@ -27,9 +23,7 @@ import io.icker.factions.command.ModifyCommand;
 import io.icker.factions.command.PermissionCommand;
 import io.icker.factions.command.RankCommand;
 import io.icker.factions.command.SafeCommand;
-import io.icker.factions.command.SacrificeCommand;
 import io.icker.factions.command.SettingsCommand;
-import io.icker.factions.command.VassalCommand;
 import io.icker.factions.config.Config;
 import io.icker.factions.core.ChatManager;
 import io.icker.factions.core.FactionsManager;
@@ -95,32 +89,14 @@ public class FactionsMod implements ModInitializer {
 
         Command[] commands = new Command[] {new AdminCommand(), new SettingsCommand(),
                 new ClaimCommand(), new CompatCommand(), new CreateCommand(), new DeclareCommand(), new DisbandCommand(),
-                new GodsCommand(), new HomeCommand(), new InfoCommand(), new InviteCommand(), new JoinCommand(),
+                new HomeCommand(), new InfoCommand(), new InviteCommand(), new JoinCommand(),
                 new KickCommand(), new LeaveCommand(), new ListCommand(), new MapCommand(),
                 new MemberCommand(), new ModifyCommand(), new RankCommand(), new SafeCommand(),
-                new SacrificeCommand(), new PermissionCommand(), new VassalCommand()};
+                new PermissionCommand()};
 
         for (Command command : commands) {
             factions.addChild(command.getNode());
             alias.addChild(command.getNode());
         }
-    }
-
-    /**
-     * Public API: Add fame power to a player's faction.
-     * Use this method from other mods (e.g., dungeon mods) to grant fame.
-     *
-     * @param playerUUID The UUID of the player who earned the fame
-     * @param amount The amount of fame power to add
-     * @return The actual amount added (may be less if at max), or 0 if player has no faction
-     */
-    public static int addFamePower(UUID playerUUID, int amount) {
-        User user = User.get(playerUUID);
-        if (user == null || !user.isInFaction()) {
-            return 0;
-        }
-
-        Faction faction = user.getFaction();
-        return faction.addFamePower(amount);
     }
 }
