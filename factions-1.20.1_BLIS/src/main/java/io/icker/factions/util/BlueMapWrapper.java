@@ -127,6 +127,8 @@ public class BlueMapWrapper {
 
                     int minY = FactionsMod.CONFIG.BLUEMAP.MARKER_MIN_Y;
                     int maxY = FactionsMod.CONFIG.BLUEMAP.MARKER_MAX_Y;
+                    Integer colorValue = faction.getColor().getColorValue();
+                    int rgb = colorValue != null ? colorValue : 0xFFFFFF;
                     ExtrudeMarker marker =
                             ExtrudeMarker.builder()
                                     .position(
@@ -135,14 +137,8 @@ public class BlueMapWrapper {
                                             (double) outlines.get(0).get(0).getY())
                                     .shape(shapes.remove(0), minY, maxY)
                                     .holes(shapes.toArray(new Shape[0]))
-                                    .fillColor(
-                                            new Color(
-                                                    faction.getColor().getColorValue()
-                                                            | 0x30000000))
-                                    .lineColor(
-                                            new Color(
-                                                    faction.getColor().getColorValue()
-                                                            | 0x70000000))
+                                    .fillColor(new Color(rgb | 0x30000000))
+                                    .lineColor(new Color(rgb | 0x70000000))
                                     .label(faction.getName())
                                     .detail(info)
                                     .build();
@@ -188,7 +184,7 @@ public class BlueMapWrapper {
             HtmlMarker nameMarker = HtmlMarker.builder()
                     .label(faction.getName() + "'s Home")
                     .position(home.x, home.y, home.z)
-                    .html("<div style='line-height: 2em; font-size: 2em; color: " + faction.getColor().getName() + "; transform: translate(-50%, -50%);'>" + faction.getName() + "</div>")
+                    .html("<div style='line-height: 2em; font-size: 2em; color: " + (faction.getColor().getName() != null ? faction.getColor().getName() : "white") + "; transform: translate(-50%, -50%);'>" + faction.getName() + "</div>")
                     .anchor(0, 0)
                     .listed(true)
                     .minDistance(50)
