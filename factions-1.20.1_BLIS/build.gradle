@@ -29,6 +29,17 @@ repositories {
     }
 }
 
+sourceSets {
+    client {
+        java {
+            srcDirs = ['src/client/java']
+        }
+        resources {
+            srcDirs = ['src/client/resources']
+        }
+    }
+}
+
 loom {
     log4jConfigs.from(file("log4j-dev.xml"))
 }
@@ -39,6 +50,7 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-rendering-v1:${project.fabric_version}"
     modImplementation "me.lucko:fabric-permissions-api:${project.lucko_permissions_version}"
     modImplementation "eu.pb4:placeholder-api:${project.papi_version}"
     include "com.flowpowered:flow-math:${project.flow_version}"
@@ -69,6 +81,7 @@ jar {
     from("LICENSE") {
         rename { "${it}_${project.archivesBaseName}"}
     }
+    from sourceSets.client.output
 }
 
 publishing {
@@ -81,4 +94,13 @@ publishing {
 
 javadoc {
     source = sourceSets.main.allJava
+}
+
+// Configure client sourceset to have access to fabric rendering dependencies
+afterEvaluate {
+    sourceSets.client.compileClasspath += sourceSets.main.output
+    sourceSets.client.compileClasspath += sourceSets.main.compileClasspath
+    sourceSets.client.compileClasspath += configurations.modImplementation
+    sourceSets.client.compileClasspath += project.configurations.runtimeClasspath
+    sourceSets.client.compileClasspath += project.configurations.compileClasspath
 }

@@ -7,6 +7,7 @@ import io.icker.factions.api.persistents.Faction;
 import io.icker.factions.api.persistents.Relationship;
 import io.icker.factions.api.persistents.Relationship.Permissions;
 import io.icker.factions.api.persistents.User;
+import io.icker.factions.api.persistents.BlacklistedDimension;
 import io.icker.factions.core.InteractionsUtil.InteractionsUtilActions;
 import io.icker.factions.mixin.BucketItemAccessor;
 import io.icker.factions.mixin.ItemInvoker;
@@ -62,6 +63,12 @@ public class InteractionManager {
         if (world.isClient()) return true;
         String blockId = Registries.BLOCK.getId(state.getBlock()).toString();
         if (isBlockExempt(blockId)) return true;
+        
+        // Check if block is in a blacklisted dimension
+        if (isDimensionBlacklisted(player, pos, world)) {
+            InteractionsUtil.warn(player, InteractionsUtilActions.BREAK_BLOCKS);
+            return false;
+        }
         
         // Check if block is blacklisted by the claiming faction
         if (isBlockBlacklisted(player, pos, world, blockId)) {
@@ -187,6 +194,13 @@ public class InteractionManager {
         if (!(context.getStack().getItem() instanceof BlockItem blockItem)) return ActionResult.PASS;
         String blockId = Registries.BLOCK.getId(blockItem.getBlock()).toString();
         if (isBlockExempt(blockId)) return ActionResult.PASS;
+        
+        // Check if position is in a blacklisted dimension
+        if (isDimensionBlacklisted(context.getPlayer(), context.getBlockPos(), context.getWorld())) {
+            InteractionsUtil.warn(context.getPlayer(), InteractionsUtilActions.PLACE_BLOCKS);
+            InteractionsUtil.sync(context.getPlayer(), context.getStack(), context.getHand());
+            return ActionResult.FAIL;
+        }
         
         // Check if block is blacklisted by the claiming faction
         if (isBlockBlacklisted(context.getPlayer(), context.getBlockPos(), context.getWorld(), blockId)) {
@@ -457,6 +471,65 @@ public class InteractionManager {
         var list = FactionsMod.CONFIG.BLOCK_LIST;
         if (list.WHITELIST_ENABLED && listContains(list.WHITELIST, blockId)) return true;
         if (list.BLACKLIST_ENABLED && !listContains(list.BLACKLIST, blockId)) return true;
+        return false;
+    }
+
+    /**
+     * Check if a position is within a blacklisted dimension of the claiming faction.
+     * Admins with /f admin bypass enabled can always bypass.
+     * Only OWNER, COMMANDER, and LEADER can bypass the dimension blacklist.
+     * Members, guests, and players from other factions are blocked.
+     * 
+     * @return true if the position is within a blacklisted dimension and the player cannot interact with it
+     */
+    private static boolean isDimensionBlacklisted(PlayerEntity player, BlockPos position, World world) {
+        if (!FactionsMod.CONFIG.CLAIM_PROTECTION) {
+            return false;
+        }
+
+        String dimension = world.getRegistryKey().getValue().toString();
+        ChunkPos chunkPosition = world.getChunk(position).getPos();
+
+        Claim claim = Claim.get(chunkPosition.x, chunkPosition.z, dimension);
+        if (claim == null) {
+            // No claim = wilderness, no faction dimension blacklist applies
+            return false;
+        }
+
+        Faction claimFaction = claim.getFaction();
+        
+        // Check if the position is in any of the claiming faction's blacklisted dimensions
+        for (BlacklistedDimension blacklistedDim : claimFaction.dimensionBlacklist) {
+            if (blacklistedDim.contains(dimension, position.getX(), position.getY(), position.getZ())) {
+                // Position IS in a blacklisted dimension. Check if player can bypass.
+                User user = User.get(player.getUuid());
+                
+                // Admin bypass - if enabled, can place/break anything
+                if (user.bypass) {
+                    return false;
+                }
+
+                // Player must be in the claiming faction AND have sufficient rank
+                if (!user.isInFaction()) {
+                    // Player has no faction - they're a guest, BLOCK
+                    return true;
+                }
+
+                Faction userFaction = user.getFaction();
+                if (userFaction == null || !userFaction.getID().equals(claimFaction.getID())) {
+                    // Player is in a different faction - BLOCK
+                    return true;
+                }
+
+                // Player is in the claiming faction. Check rank.
+                // Only OWNER, COMMANDER, LEADER can bypass dimension blacklist
+                return user.rank != User.Rank.OWNER 
+                    && user.rank != User.Rank.COMMANDER 
+                    && user.rank != User.Rank.LEADER;
+            }
+        }
+
+        // Position is not in any blacklisted dimension
         return false;
     }
 

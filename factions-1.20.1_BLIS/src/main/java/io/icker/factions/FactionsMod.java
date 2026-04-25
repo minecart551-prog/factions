@@ -13,6 +13,7 @@ import io.icker.factions.command.ClaimCommand;
 import io.icker.factions.command.CompatCommand;
 import io.icker.factions.command.CreateCommand;
 import io.icker.factions.command.DeclareCommand;
+import io.icker.factions.command.DimensionCommand;
 import io.icker.factions.command.DisbandCommand;
 import io.icker.factions.command.GodsCommand;
 import io.icker.factions.command.HomeCommand;
@@ -34,6 +35,7 @@ import io.icker.factions.command.VassalCommand;
 import io.icker.factions.config.Config;
 import io.icker.factions.core.ChatManager;
 import io.icker.factions.core.FactionsManager;
+import io.icker.factions.item.FactionsItems;
 import io.icker.factions.core.InteractionManager;
 import io.icker.factions.core.ServerManager;
 import io.icker.factions.core.SoundManager;
@@ -73,12 +75,16 @@ public class FactionsMod implements ModInitializer {
             PlaceholdersWrapper.init();
         }
 
+        FactionsItems.register();
         ChatManager.register();
         FactionsManager.register();
         InteractionManager.register();
         ServerManager.register();
         SoundManager.register();
         WorldManager.register();
+        
+        // Register network handlers
+        io.icker.factions.network.DimensionNetworkHandler.registerHandlers();
 
         CommandRegistrationCallback.EVENT.register(FactionsMod::registerCommands);
     }
@@ -99,7 +105,7 @@ public class FactionsMod implements ModInitializer {
                 new GodsCommand(), new HomeCommand(), new InfoCommand(), new InviteCommand(), new JoinCommand(),
                 new KickCommand(), new LeaveCommand(), new ListCommand(), new MapCommand(),
                 new MemberCommand(), new ModifyCommand(), new RankCommand(), new SafeCommand(),
-                new SacrificeCommand(), new PermissionCommand(), new VassalCommand(), new BlockCommand()};
+                new SacrificeCommand(), new PermissionCommand(), new VassalCommand(), new BlockCommand(), new DimensionCommand()};
 
         for (Command command : commands) {
             factions.addChild(command.getNode());

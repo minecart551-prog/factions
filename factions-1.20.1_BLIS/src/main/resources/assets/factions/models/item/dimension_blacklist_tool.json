@@ -1,0 +1,6 @@
+{
+  "parent": "item/handheld",
+  "textures": {
+    "layer0": "factions:item/dimension_blacklist_tool"
+  }
+}

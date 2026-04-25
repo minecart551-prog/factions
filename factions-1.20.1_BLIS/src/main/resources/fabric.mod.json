@@ -23,6 +23,9 @@
     "entrypoints": {
         "main": [
         "io.icker.factions.FactionsMod"
+        ],
+        "client": [
+        "io.icker.factions.client.FactionsClientMod"
         ]
     },
     "mixins": [

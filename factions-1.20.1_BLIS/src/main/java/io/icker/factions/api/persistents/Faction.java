@@ -94,6 +94,9 @@ public class Faction {
     @Field("BlockBlacklist")
     public ArrayList<String> blockBlacklist = new ArrayList<>();
 
+    @Field("DimensionBlacklist")
+    public ArrayList<BlacklistedDimension> dimensionBlacklist = new ArrayList<>();
+
     @Field("OverlordId")
     private UUID overlordId;
 
