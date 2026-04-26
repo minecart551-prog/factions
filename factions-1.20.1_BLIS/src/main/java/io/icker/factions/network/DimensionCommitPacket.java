@@ -29,6 +29,11 @@ public class DimensionCommitPacket {
         NbtList dimensionsList = new NbtList();
 
         for (BlacklistedDimension dim : this.dimensions) {
+            if (dim == null || dim.world == null) {
+                System.out.println("[Factions] Warning: Skipping null dimension or dimension with null world during commit");
+                continue;
+            }
+            
             NbtCompound dimTag = new NbtCompound();
             dimTag.putString("world", dim.world);
             dimTag.putInt("minX", dim.minX);
@@ -37,7 +42,7 @@ public class DimensionCommitPacket {
             dimTag.putInt("maxX", dim.maxX);
             dimTag.putInt("maxY", dim.maxY);
             dimTag.putInt("maxZ", dim.maxZ);
-            dimTag.putString("name", dim.name);
+            dimTag.putString("name", dim.name != null ? dim.name : "Unknown");
             dimensionsList.add(dimTag);
         }
 

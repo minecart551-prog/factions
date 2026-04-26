@@ -53,6 +53,14 @@ public class DimensionCommand implements Command {
             return 0;
         }
         
+        System.out.println("[Factions] Dimension list query: " + faction.dimensionBlacklist.size() + " dimensions found");
+        for (int i = 0; i < faction.dimensionBlacklist.size(); i++) {
+            BlacklistedDimension dim = faction.dimensionBlacklist.get(i);
+            System.out.println("[Factions] Dimension " + i + ": world=" + dim.world + ", name=" + dim.name + 
+                ", coords=[" + dim.minX + "," + dim.minY + "," + dim.minZ + "] to [" + 
+                dim.maxX + "," + dim.maxY + "," + dim.maxZ + "]");
+        }
+        
         if (faction.dimensionBlacklist.isEmpty()) {
             new Message("No dimensions are blacklisted").send(player, false);
             return 1;
@@ -66,7 +74,6 @@ public class DimensionCommand implements Command {
         }
         return 1;
     }
-    
 
     
     private int clear(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {

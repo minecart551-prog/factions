@@ -282,19 +282,25 @@ public class SelectionManager {
                 io.icker.factions.api.persistents.User user = io.icker.factions.api.persistents.User.get(mc.player.getUuid());
                 if (user != null) {
                     io.icker.factions.api.persistents.Faction faction = user.getFaction();
-                    if (faction != null && !faction.dimensionBlacklist.isEmpty()) {
+                    if (faction != null) {
                         this.pendingSelections.clear();
-                        // Filter out any invalid regions (null world or other null fields)
+                        // Load and validate all regions
+                        int loaded = 0;
                         for (io.icker.factions.api.persistents.BlacklistedDimension dim : faction.dimensionBlacklist) {
-                            if (dim != null && dim.world != null) {
+                            if (dim != null && dim.world != null && !dim.world.isEmpty()) {
                                 this.pendingSelections.add(dim);
+                                loaded++;
+                            } else if (dim != null) {
+                                System.out.println("[Factions] Warning: Skipping dimension with null world: " + dim.name);
                             }
                         }
+                        System.out.println("[Factions] Loaded " + loaded + " dimensions from faction (total in faction: " + faction.dimensionBlacklist.size() + ")");
                     }
                 }
             }
         } catch (Exception e) {
-            // Silently fail if faction data unavailable
+            System.err.println("[Factions] Error loading dimensions from faction:");
+            e.printStackTrace();
         }
     }
 }

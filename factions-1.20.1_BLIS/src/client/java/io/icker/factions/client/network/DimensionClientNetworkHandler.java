@@ -14,6 +14,7 @@ import java.util.List;
  * Client-side handler for sending dimension selections to server
  */
 public class DimensionClientNetworkHandler {
+    public static final Identifier SYNC_REQUEST_PACKET_ID = new Identifier("factions", "dimension_sync_request");
     
     /**
      * Send pending selections to server for commitment
@@ -38,6 +39,23 @@ public class DimensionClientNetworkHandler {
             System.out.println("[Factions] Sent dimension commit packet successfully");
         } catch (Exception e) {
             System.err.println("[Factions] Error sending dimension commit packet:");
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Request the server to send the current dimensions for this player's faction
+     */
+    public static void requestDimensionSync() {
+        try {
+            // Send empty packet to request sync
+            io.netty.buffer.ByteBuf byteBuf = io.netty.buffer.Unpooled.buffer();
+            PacketByteBuf buf = new PacketByteBuf(byteBuf);
+            
+            ClientPlayNetworking.send(SYNC_REQUEST_PACKET_ID, buf);
+            System.out.println("[Factions] Sent dimension sync request to server");
+        } catch (Exception e) {
+            System.err.println("[Factions] Error sending dimension sync request:");
             e.printStackTrace();
         }
     }

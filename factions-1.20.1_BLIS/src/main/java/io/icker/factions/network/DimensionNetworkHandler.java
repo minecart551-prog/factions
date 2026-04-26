@@ -25,6 +25,7 @@ import net.minecraft.world.World;
 public class DimensionNetworkHandler {
     public static final Identifier COMMIT_PACKET_ID = new Identifier("factions", "dimension_commit");
     public static final Identifier SYNC_PACKET_ID = new Identifier("factions", "dimension_sync");
+    public static final Identifier SYNC_REQUEST_PACKET_ID = new Identifier("factions", "dimension_sync_request");
 
     public static void registerHandlers() {
         // Register the server-side packet receiver for client→server commits
@@ -33,12 +34,46 @@ public class DimensionNetworkHandler {
                 handleCommitPacket(server, player, buf);
             });
         
+        // Register the server-side packet receiver for client→server sync requests
+        ServerPlayNetworking.registerGlobalReceiver(SYNC_REQUEST_PACKET_ID,
+            (server, player, handler, buf, responseSender) -> {
+                handleSyncRequestPacket(server, player);
+            });
+        
         // Prevent block breaking when holding the dimension blacklist tool
         AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
             if (player.getStackInHand(hand).getItem() == FactionsItems.DIMENSION_BLACKLIST_TOOL) {
                 return ActionResult.FAIL; // Prevent the attack
             }
             return ActionResult.PASS; // Allow other attacks
+        });
+    }
+    
+    /**
+     * Handle sync request from client - send current dimensions back
+     */
+    private static void handleSyncRequestPacket(net.minecraft.server.MinecraftServer server, ServerPlayerEntity player) {
+        server.execute(() -> {
+            try {
+                User user = User.get(player.getUuid());
+                if (user == null) {
+                    System.out.println("[Factions] Sync request: User not found");
+                    return;
+                }
+                
+                Faction faction = user.getFaction();
+                if (faction == null) {
+                    System.out.println("[Factions] Sync request: Faction not found");
+                    return;
+                }
+                
+                // Send the current dimensions from the server to the client
+                System.out.println("[Factions] Sync request: Sending " + faction.dimensionBlacklist.size() + " dimensions to player");
+                syncDimensionsToPlayer(player, faction.dimensionBlacklist);
+            } catch (Exception e) {
+                System.err.println("[Factions] Error handling sync request:");
+                e.printStackTrace();
+            }
         });
     }
     
@@ -87,6 +122,15 @@ public class DimensionNetworkHandler {
                     if (nbtCompound != null) {
                         DimensionCommitPacket packet = DimensionCommitPacket.fromNbt(nbtCompound);
                         
+                        // Debug: log what we received
+                        System.out.println("[Factions] Parsed packet with " + packet.dimensions.size() + " dimensions:");
+                        for (int i = 0; i < packet.dimensions.size(); i++) {
+                            io.icker.factions.api.persistents.BlacklistedDimension dim = packet.dimensions.get(i);
+                            System.out.println("[Factions]   Dim " + i + ": world=" + dim.world + ", name=" + dim.name + 
+                                ", coords=[" + dim.minX + "," + dim.minY + "," + dim.minZ + "] to [" + 
+                                dim.maxX + "," + dim.maxY + "," + dim.maxZ + "]");
+                        }
+                        
                         // Get faction and save dimensions
                         User user = User.get(player.getUuid());
                         if (user == null) {
@@ -105,9 +149,23 @@ public class DimensionNetworkHandler {
                         // Replace the entire list with what the client sent (to ensure deletions are reflected)
                         faction.dimensionBlacklist.clear();
                         faction.dimensionBlacklist.addAll(packet.dimensions);
+                        
+                        System.out.println("[Factions] Before save - faction has " + faction.dimensionBlacklist.size() + " dimensions:");
+                        for (int i = 0; i < faction.dimensionBlacklist.size(); i++) {
+                            io.icker.factions.api.persistents.BlacklistedDimension dim = faction.dimensionBlacklist.get(i);
+                            System.out.println("[Factions]   Dim " + i + ": world=" + dim.world + ", name=" + dim.name);
+                        }
+                        
                         // Trigger MODIFY event and save all factions
                         io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
                         Faction.save();
+                        
+                        System.out.println("[Factions] After save - faction has " + faction.dimensionBlacklist.size() + " dimensions:");
+                        for (int i = 0; i < faction.dimensionBlacklist.size(); i++) {
+                            io.icker.factions.api.persistents.BlacklistedDimension dim = faction.dimensionBlacklist.get(i);
+                            System.out.println("[Factions]   Dim " + i + ": world=" + dim.world + ", name=" + dim.name);
+                        }
+                        
                         player.sendMessage(
                             net.minecraft.text.Text.literal("§6Dimension selections committed!"), false);
                     } else {

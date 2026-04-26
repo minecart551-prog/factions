@@ -48,9 +48,9 @@ public class DimensionBlacklistItemHandler {
         // Check if tool is being equipped/unequipped
         boolean holdingTool = isHoldingTool(mc.player);
         if (holdingTool && !toolEquipped) {
-            // Tool just equipped - load existing blacklist from faction to ensure latest state
+            // Tool just equipped - request sync from server for fresh data
             toolEquipped = true;
-            SelectionManager.getInstance().loadFromFaction();
+            io.icker.factions.client.network.DimensionClientNetworkHandler.requestDimensionSync();
         } else if (!holdingTool && toolEquipped) {
             // Tool just unequipped - clear selection state but preserve pending selections
             toolEquipped = false;

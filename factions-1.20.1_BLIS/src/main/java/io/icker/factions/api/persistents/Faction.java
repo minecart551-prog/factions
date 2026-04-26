@@ -23,6 +23,22 @@ import net.minecraft.util.collection.DefaultedList;
 public class Faction {
     private static final HashMap<UUID, Faction> STORE =
             Database.load(Faction.class, Faction::getID);
+    
+    // Post-load migration: migrate old DimensionBlacklist to JSON format
+    static {
+        for (Faction faction : STORE.values()) {
+            // If old data exists, migrate it to JSON format
+            if (!faction.dimensionBlacklistOld.isEmpty()) {
+                System.out.println("[Factions] Migrating " + faction.dimensionBlacklistOld.size() + " dimensions for faction " + faction.name + " from old format to JSON");
+                faction.dimensionBlacklist = new ArrayList<>(faction.dimensionBlacklistOld);
+                faction.saveDimensionBlacklistToJson();
+                faction.dimensionBlacklistOld.clear(); // Clear old data so it doesn't get saved again
+            } else if (!faction.dimensionBlacklistJson.isEmpty() && !faction.dimensionBlacklistJson.equals("[]")) {
+                // Load from JSON if new format exists
+                faction.loadDimensionBlacklistFromJson();
+            }
+        }
+    }
 
     @Field("ID")
     private UUID id;
@@ -95,6 +111,11 @@ public class Faction {
     public ArrayList<String> blockBlacklist = new ArrayList<>();
 
     @Field("DimensionBlacklist")
+    private ArrayList<BlacklistedDimension> dimensionBlacklistOld = new ArrayList<>();
+    
+    @Field("DimensionBlacklistJson")
+    private String dimensionBlacklistJson = "[]";
+    
     public ArrayList<BlacklistedDimension> dimensionBlacklist = new ArrayList<>();
 
     @Field("OverlordId")
@@ -130,7 +151,14 @@ public class Faction {
 
     @Nullable
     public static Faction get(UUID id) {
-        return STORE.get(id);
+        Faction faction = STORE.get(id);
+        if (faction != null) {
+            // Load dimension blacklist from JSON if not already loaded
+            if (faction.dimensionBlacklist.isEmpty() && faction.dimensionBlacklistJson != null && !faction.dimensionBlacklistJson.isEmpty() && !faction.dimensionBlacklistJson.equals("[]")) {
+                faction.loadDimensionBlacklistFromJson();
+            }
+        }
+        return faction;
     }
 
     @Nullable
@@ -682,6 +710,10 @@ public class Faction {
     }
 
     public static void save() {
+        // Before saving, convert all dimension blacklists to JSON
+        for (Faction faction : STORE.values()) {
+            faction.saveDimensionBlacklistToJson();
+        }
         Database.save(Faction.class, STORE.values().stream().toList());
     }
 
@@ -765,6 +797,40 @@ public class Faction {
         // Just reduce the stored value, don't touch lastSacrifice
         wealthPower = currentPower - amount;
         return true;
+    }
+    
+    /**
+     * Ensure dimensionBlacklist is loaded from JSON before access
+     * Called automatically when needed
+     */
+    public void loadDimensionBlacklistFromJson() {
+        try {
+            List<BlacklistedDimension> loaded = GSON.fromJson(dimensionBlacklistJson,
+                new TypeToken<ArrayList<BlacklistedDimension>>(){}.getType());
+            if (loaded != null) {
+                dimensionBlacklist = new ArrayList<>(loaded);
+            } else {
+                dimensionBlacklist = new ArrayList<>();
+            }
+        } catch (Exception e) {
+            System.err.println("[Factions] Error loading dimension blacklist from JSON:");
+            e.printStackTrace();
+            dimensionBlacklist = new ArrayList<>();
+        }
+    }
+    
+    /**
+     * Save dimensionBlacklist to JSON before database persistence
+     * Called automatically during save
+     */
+    public void saveDimensionBlacklistToJson() {
+        try {
+            dimensionBlacklistJson = GSON.toJson(dimensionBlacklist);
+            System.out.println("[Factions] Saved " + dimensionBlacklist.size() + " dimensions to JSON");
+        } catch (Exception e) {
+            System.err.println("[Factions] Error saving dimension blacklist to JSON:");
+            e.printStackTrace();
+        }
     }
 
     public static class ActiveBlessing {

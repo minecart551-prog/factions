@@ -33,11 +33,22 @@ public class DimensionClientSyncHandler {
                 io.icker.factions.network.DimensionSyncPacket packet = 
                     io.icker.factions.network.DimensionSyncPacket.fromNbt(nbtCompound);
                 
+                // Filter out any dimensions with null world
+                java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> validDimensions = 
+                    new java.util.ArrayList<>();
+                for (io.icker.factions.api.persistents.BlacklistedDimension dim : packet.dimensions) {
+                    if (dim != null && dim.world != null && !dim.world.isEmpty()) {
+                        validDimensions.add(dim);
+                    } else {
+                        System.out.println("[Factions] Warning: Skipping invalid dimension during sync: world=" + (dim != null ? dim.world : "null"));
+                    }
+                }
+                
                 // Update client-side pending selections with synced data
                 SelectionManager selectionMgr = SelectionManager.getInstance();
-                selectionMgr.setPendingSelections(packet.dimensions);
+                selectionMgr.setPendingSelections(validDimensions);
                 
-                System.out.println("[Factions] Synced " + packet.dimensions.size() + " dimensions from server");
+                System.out.println("[Factions] Synced " + validDimensions.size() + " valid dimensions from server (received " + packet.dimensions.size() + " total)");
             }
         } catch (Exception e) {
             System.err.println("[Factions] Error handling dimension sync packet:");
