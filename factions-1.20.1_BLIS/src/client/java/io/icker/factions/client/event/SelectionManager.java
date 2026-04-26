@@ -63,7 +63,9 @@ public class SelectionManager {
             // Auto-commit the updated pending selections to the server
             io.icker.factions.client.network.DimensionClientNetworkHandler.commitDimensions(this.pendingSelections);
 
-            // Keep displaying the region (don't reset)
+            // Clear the selection state so the merged shape is visible immediately
+            this.firstPos = null;
+            this.secondPos = null;
         }
     }
     
@@ -84,11 +86,13 @@ public class SelectionManager {
      */
     public void enterDeleteMode(BlockPos pos, String world) {
         if (!deleteMode) {
-            // First right-click in delete mode
+            // First right-click in delete mode - clear selection state so it doesn't interfere
             this.deleteMode = true;
             this.deleteFirstPos = pos;
             this.deleteSecondPos = null;
             this.currentWorld = world;
+            this.firstPos = null;  // Clear selection so old boxes don't interfere
+            this.secondPos = null;
         } else if (this.deleteFirstPos != null && this.deleteSecondPos == null) {
             // Second right-click - set second corner and delete
             this.deleteSecondPos = pos;
@@ -227,6 +231,13 @@ public class SelectionManager {
      */
     public List<BlacklistedDimension> getPendingSelections() {
         return new ArrayList<>(this.pendingSelections);
+    }
+    
+    /**
+     * Set pending selections (called from server sync)
+     */
+    public void setPendingSelections(List<BlacklistedDimension> selections) {
+        this.pendingSelections = new ArrayList<>(selections);
     }
 
     /**

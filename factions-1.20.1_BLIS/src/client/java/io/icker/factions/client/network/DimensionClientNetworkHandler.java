@@ -20,28 +20,25 @@ public class DimensionClientNetworkHandler {
      */
     public static void commitDimensions(List<BlacklistedDimension> dimensions) {
         try {
-            byte[] serialized = serializeDimensions(dimensions);
-            PacketByteBuf buf = new PacketByteBuf(io.netty.buffer.Unpooled.wrappedBuffer(serialized));
-            ClientPlayNetworking.send(DimensionNetworkHandler.COMMIT_PACKET_ID, buf);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-    
-    /**
-     * Serialize dimensions to bytes for network transmission
-     */
-    private static byte[] serializeDimensions(List<BlacklistedDimension> dimensions) {
-        try {
+            // Serialize NBT to byte array first
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             DataOutputStream dos = new DataOutputStream(baos);
             io.icker.factions.network.DimensionCommitPacket packet = 
                 new io.icker.factions.network.DimensionCommitPacket(dimensions);
             net.minecraft.nbt.NbtIo.write(packet.toNbt(), dos);
-            return baos.toByteArray();
+            
+            byte[] nbtBytes = baos.toByteArray();
+            System.out.println("[Factions] Sending " + nbtBytes.length + " bytes of NBT data containing " + dimensions.size() + " dimensions");
+            
+            // Create buffer and write data
+            io.netty.buffer.ByteBuf byteBuf = io.netty.buffer.Unpooled.copiedBuffer(nbtBytes);
+            PacketByteBuf buf = new PacketByteBuf(byteBuf);
+            
+            ClientPlayNetworking.send(DimensionNetworkHandler.COMMIT_PACKET_ID, buf);
+            System.out.println("[Factions] Sent dimension commit packet successfully");
         } catch (Exception e) {
+            System.err.println("[Factions] Error sending dimension commit packet:");
             e.printStackTrace();
-            return new byte[0];
         }
     }
 }

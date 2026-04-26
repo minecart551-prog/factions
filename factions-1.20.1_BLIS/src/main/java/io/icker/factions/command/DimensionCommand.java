@@ -91,7 +91,12 @@ public class DimensionCommand implements Command {
         
         int count = faction.dimensionBlacklist.size();
         faction.dimensionBlacklist.clear();
-        faction.save();
+        // Trigger MODIFY event and save all factions
+        io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
+        Faction.save();
+        
+        // Sync cleared dimensions to the player
+        io.icker.factions.network.DimensionNetworkHandler.syncDimensionsToPlayer(player, faction.dimensionBlacklist);
         
         new Message("Cleared ").add(new Message(count + "").format(Formatting.YELLOW))
                 .add(" blacklisted dimensions").send(player, false);

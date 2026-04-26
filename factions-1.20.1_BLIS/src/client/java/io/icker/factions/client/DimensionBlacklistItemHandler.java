@@ -33,7 +33,6 @@ public class DimensionBlacklistItemHandler {
     private static boolean lastRightClickPressed = false;
     private static int selectionStep = 0; // 0: not selecting, 1: first pos set, 2: region created
     private static boolean toolEquipped = false; // Track if tool is currently equipped
-    private static boolean factionLoaded = false; // Track if we've loaded from faction
 
     public static void register() {
         ClientTickEvents.START_CLIENT_TICK.register(DimensionBlacklistItemHandler::onClientTick);
@@ -49,12 +48,9 @@ public class DimensionBlacklistItemHandler {
         // Check if tool is being equipped/unequipped
         boolean holdingTool = isHoldingTool(mc.player);
         if (holdingTool && !toolEquipped) {
-            // Tool just equipped - load existing blacklist only on first pickup in this session
+            // Tool just equipped - load existing blacklist from faction to ensure latest state
             toolEquipped = true;
-            if (!factionLoaded) {
-                SelectionManager.getInstance().loadFromFaction();
-                factionLoaded = true;
-            }
+            SelectionManager.getInstance().loadFromFaction();
         } else if (!holdingTool && toolEquipped) {
             // Tool just unequipped - clear selection state but preserve pending selections
             toolEquipped = false;

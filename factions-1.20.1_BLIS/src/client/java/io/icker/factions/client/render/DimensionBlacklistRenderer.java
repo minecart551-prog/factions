@@ -63,29 +63,28 @@ public class DimensionBlacklistRenderer {
             renderBoundaryFacesWithFill(boundaryFaces, camX, camY, camZ, 0.0f, 1.0f, 0.0f, 0.25f, matrices);
         }
 
-        // Render current selection (first/second positions) in GREEN
+        // Render current selection (first/second positions) as GREEN filled boxes
         BlockPos firstPos = selectionMgr.getFirstPos();
         BlockPos secondPos = selectionMgr.getSecondPos();
 
-        if (firstPos == null) {
-            matrices.pop();
-            return;
-        }
-
-        if (secondPos != null) {
-            int minX = Math.min(firstPos.getX(), secondPos.getX());
-            int minY = Math.min(firstPos.getY(), secondPos.getY());
-            int minZ = Math.min(firstPos.getZ(), secondPos.getZ());
-            int maxX = Math.max(firstPos.getX(), secondPos.getX()) + 1;
-            int maxY = Math.max(firstPos.getY(), secondPos.getY()) + 1;
-            int maxZ = Math.max(firstPos.getZ(), secondPos.getZ()) + 1;
-            
-            renderBoxOutline(minX - camX, minY - camY, minZ - camZ, maxX - camX, maxY - camY, maxZ - camZ, 0.0f, 1.0f, 0.0f, 1.0f, matrices);
-        } else {
-            int x = firstPos.getX();
-            int y = firstPos.getY();
-            int z = firstPos.getZ();
-            renderBoxOutline(x - camX, y - camY, z - camZ, x + 1 - camX, y + 1 - camY, z + 1 - camZ, 0.0f, 1.0f, 0.0f, 1.0f, matrices);
+        if (firstPos != null) {
+            if (secondPos != null) {
+                int minX = Math.min(firstPos.getX(), secondPos.getX());
+                int minY = Math.min(firstPos.getY(), secondPos.getY());
+                int minZ = Math.min(firstPos.getZ(), secondPos.getZ());
+                int maxX = Math.max(firstPos.getX(), secondPos.getX()) + 1;
+                int maxY = Math.max(firstPos.getY(), secondPos.getY()) + 1;
+                int maxZ = Math.max(firstPos.getZ(), secondPos.getZ()) + 1;
+                
+                renderFilledDeleteBox(minX - camX, minY - camY, minZ - camZ, maxX - camX, maxY - camY, maxZ - camZ,
+                                     0.0f, 1.0f, 0.0f, 0.25f, matrices);
+            } else {
+                int x = firstPos.getX();
+                int y = firstPos.getY();
+                int z = firstPos.getZ();
+                renderFilledDeleteBox(x - camX, y - camY, z - camZ, x + 1 - camX, y + 1 - camY, z + 1 - camZ,
+                                     0.0f, 1.0f, 0.0f, 0.25f, matrices);
+            }
         }
 
         // Render delete mode red box preview
