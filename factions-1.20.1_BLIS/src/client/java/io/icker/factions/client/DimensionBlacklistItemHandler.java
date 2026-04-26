@@ -33,30 +33,11 @@ public class DimensionBlacklistItemHandler {
     private static boolean lastRightClickPressed = false;
     private static int selectionStep = 0; // 0: not selecting, 1: first pos set, 2: region created
     private static boolean toolEquipped = false; // Track if tool is currently equipped
+    private static boolean factionLoaded = false; // Track if we've loaded from faction
 
     public static void register() {
-        try {
-            LOGGER.info("Registering event listeners!");
-            sendChat("§6[DimensionBlacklist]§r Registering event listeners...");
-            ClientTickEvents.START_CLIENT_TICK.register(DimensionBlacklistItemHandler::onClientTick);
-            WorldRenderEvents.LAST.register(DimensionBlacklistItemHandler::onWorldRenderLast);
-            LOGGER.info("Event listeners registered!");
-            sendChat("§6[DimensionBlacklist]§r Event listeners registered!");
-        } catch (Exception e) {
-            LOGGER.error("ERROR registering event listeners:", e);
-            sendChat("§c[DimensionBlacklist] ERROR: " + e.getMessage());
-        }
-    }
-
-    private static void sendChat(String message) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc != null) {
-            mc.execute(() -> {
-                if (mc.player != null) {
-                    mc.player.sendMessage(net.minecraft.text.Text.literal(message), false);
-                }
-            });
-        }
+        ClientTickEvents.START_CLIENT_TICK.register(DimensionBlacklistItemHandler::onClientTick);
+        WorldRenderEvents.LAST.register(DimensionBlacklistItemHandler::onWorldRenderLast);
     }
 
     /**
@@ -68,12 +49,14 @@ public class DimensionBlacklistItemHandler {
         // Check if tool is being equipped/unequipped
         boolean holdingTool = isHoldingTool(mc.player);
         if (holdingTool && !toolEquipped) {
-            // Tool just equipped - load existing blacklist
+            // Tool just equipped - load existing blacklist only on first pickup in this session
             toolEquipped = true;
-            SelectionManager.getInstance().loadFromFaction();
-            sendChat("§6[DimensionBlacklist]§r Tool equipped - loaded existing blacklists");
+            if (!factionLoaded) {
+                SelectionManager.getInstance().loadFromFaction();
+                factionLoaded = true;
+            }
         } else if (!holdingTool && toolEquipped) {
-            // Tool just unequipped - clear selection state
+            // Tool just unequipped - clear selection state but preserve pending selections
             toolEquipped = false;
             lastLeftClickPressed = false;
             lastRightClickPressed = false;
@@ -89,7 +72,17 @@ public class DimensionBlacklistItemHandler {
 
         // Update action bar with current state
         SelectionManager selectionMgr = SelectionManager.getInstance();
-        if (selectionStep == 0) {
+        
+        if (selectionMgr.isDeleteMode()) {
+            // Show delete mode state
+            BlockPos delFirstPos = selectionMgr.getDeleteFirstPos();
+            BlockPos delSecondPos = selectionMgr.getDeleteSecondPos();
+            if (delSecondPos != null) {
+                mc.player.sendMessage(Text.of("§cDeletion complete!"), true);
+            } else if (delFirstPos != null) {
+                mc.player.sendMessage(Text.of("§cDelete mode: First position set at " + delFirstPos + " - Right click another block to delete"), true);
+            }
+        } else if (selectionStep == 0) {
             mc.player.sendMessage(Text.of("§eLeft click to add first position"), true);
         } else if (selectionStep == 1) {
             BlockPos firstPos = selectionMgr.getFirstPos();
@@ -137,16 +130,12 @@ public class DimensionBlacklistItemHandler {
         
         if (selectionStep == 0 || selectionStep == 2) {
             // Set first position
-            LOGGER.info("Left-click detected at {} in {} - setting FIRST position", pos, worldKey);
             selectionMgr.clearSelection();
             selectionMgr.setFirstPos(pos, worldKey);
-            sendChat("§6[DimensionBlacklist]§r First position selected: " + pos);
             selectionStep = 1;
         } else if (selectionStep == 1) {
             // Set second position and create region
-            LOGGER.info("Left-click detected at {} - setting SECOND position", pos);
             selectionMgr.setSecondPos(pos);
-            sendChat("§6[DimensionBlacklist]§r Region created! Left click to add another");
             selectionStep = 2;
         }
     }
@@ -164,18 +153,8 @@ public class DimensionBlacklistItemHandler {
         String worldKey = mc.world.getRegistryKey().getValue().toString();
         SelectionManager selectionMgr = SelectionManager.getInstance();
         
-        // Check if already in delete mode (second right-click = confirm)
-        if (selectionMgr.isDeleteMode()) {
-            LOGGER.info("Delete confirmed at {}", pos);
-            selectionMgr.confirmDelete(pos);
-            sendChat("§6[DimensionBlacklist]§r Region deleted!");
-            selectionStep = 0; // Reset state
-        } else {
-            // First right-click = enter delete mode
-            LOGGER.info("Right-click detected at {} - DELETE mode", pos);
-            selectionMgr.enterDeleteMode(pos, worldKey);
-            sendChat("§6[DimensionBlacklist]§r Right click again to confirm DELETE");
-        }
+        // Enter delete mode - first right-click sets first corner, second right-click sets second and deletes
+        selectionMgr.enterDeleteMode(pos, worldKey);
     }
 
     /**
@@ -185,8 +164,6 @@ public class DimensionBlacklistItemHandler {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null || mc.world == null) return;
         if (!isHoldingTool(mc.player)) return;
-
-        LOGGER.info("onWorldRenderLast called!");
         
         var camera = context.camera();
         double camX = camera.getPos().x;
@@ -196,8 +173,6 @@ public class DimensionBlacklistItemHandler {
         var matrices = context.matrixStack();
         
         DimensionBlacklistRenderer.getInstance().render(camX, camY, camZ, matrices);
-        
-        RenderSystem.disableBlend();
     }
 
     /**

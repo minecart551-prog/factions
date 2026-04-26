@@ -19,7 +19,8 @@ public class SelectionManager {
     private List<BlacklistedDimension> pendingSelections = new ArrayList<>();
     private String currentWorld = null;
     private boolean deleteMode = false;
-    private int deleteModeCounter = 0; // Track right-clicks for delete confirmation
+    private BlockPos deleteFirstPos = null;  // First position for delete box
+    private BlockPos deleteSecondPos = null; // Second position for delete box
 
     private SelectionManager() {
     }
@@ -36,7 +37,6 @@ public class SelectionManager {
         this.secondPos = null; // Reset second pos
         this.currentWorld = world;
         this.deleteMode = false;
-        this.deleteModeCounter = 0;
     }
 
     /**
@@ -57,22 +57,7 @@ public class SelectionManager {
                     "Region_" + System.currentTimeMillis()
             );
 
-            // Merge with overlapping existing selections
-            List<io.icker.factions.api.persistents.BlacklistedDimension> toRemove = new ArrayList<>();
-            for (io.icker.factions.api.persistents.BlacklistedDimension existing : this.pendingSelections) {
-                try {
-                    if (existing != null && existing.overlaps(newDimension)) {
-                        newDimension = newDimension.merge(existing);
-                        toRemove.add(existing);
-                    }
-                } catch (NullPointerException e) {
-                    // Skip invalid regions
-                    org.slf4j.LoggerFactory.getLogger("FactionsClient")
-                        .warn("Skipping invalid region during overlap check", e);
-                    toRemove.add(existing);
-                }
-            }
-            this.pendingSelections.removeAll(toRemove);
+            // Add the new region as-is without merging - keep them as separate connected shapes
             this.pendingSelections.add(newDimension);
 
             // Auto-commit the updated pending selections to the server
@@ -90,40 +75,142 @@ public class SelectionManager {
         this.secondPos = null;
         this.currentWorld = null;
         this.deleteMode = false;
-        this.deleteModeCounter = 0;
+        this.deleteFirstPos = null;
+        this.deleteSecondPos = null;
     }
 
     /**
-     * Enter delete mode - next right-click will delete the confirmed region
+     * Enter delete mode - first right-click sets first corner
      */
     public void enterDeleteMode(BlockPos pos, String world) {
-        if (!this.deleteMode) {
+        if (!deleteMode) {
+            // First right-click in delete mode
             this.deleteMode = true;
-            this.deleteModeCounter = 1;
-            this.firstPos = pos;
+            this.deleteFirstPos = pos;
+            this.deleteSecondPos = null;
             this.currentWorld = world;
-        } else {
-            this.deleteModeCounter++;
+        } else if (this.deleteFirstPos != null && this.deleteSecondPos == null) {
+            // Second right-click - set second corner and delete
+            this.deleteSecondPos = pos;
+            confirmDelete();
         }
     }
 
     /**
-     * Confirm delete and remove region
+     * Confirm delete - subtract the delete box from overlapping shapes
      */
-    public void confirmDelete(BlockPos pos) {
-        if (this.deleteMode && this.deleteModeCounter >= 2) {
-            // Find and remove the region at this position
-            for (int i = this.pendingSelections.size() - 1; i >= 0; i--) {
-                io.icker.factions.api.persistents.BlacklistedDimension dim = this.pendingSelections.get(i);
-                if (dim.contains(currentWorld, pos.getX(), pos.getY(), pos.getZ())) {
-                    this.pendingSelections.remove(i);
-                    break;
+    public void confirmDelete() {
+        if (this.deleteMode && this.deleteFirstPos != null && this.deleteSecondPos != null && this.currentWorld != null) {
+            int delMinX = Math.min(this.deleteFirstPos.getX(), this.deleteSecondPos.getX());
+            int delMaxX = Math.max(this.deleteFirstPos.getX(), this.deleteSecondPos.getX());
+            int delMinY = Math.min(this.deleteFirstPos.getY(), this.deleteSecondPos.getY());
+            int delMaxY = Math.max(this.deleteFirstPos.getY(), this.deleteSecondPos.getY());
+            int delMinZ = Math.min(this.deleteFirstPos.getZ(), this.deleteSecondPos.getZ());
+            int delMaxZ = Math.max(this.deleteFirstPos.getZ(), this.deleteSecondPos.getZ());
+            
+            // For each pending selection, subtract the delete box
+            List<BlacklistedDimension> updatedSelections = new ArrayList<>();
+            for (BlacklistedDimension dim : this.pendingSelections) {
+                if (dim.world.equals(this.currentWorld)) {
+                    // Check if this region overlaps with delete box
+                    if (dim.minX <= delMaxX && dim.maxX >= delMinX &&
+                        dim.minY <= delMaxY && dim.maxY >= delMinY &&
+                        dim.minZ <= delMaxZ && dim.maxZ >= delMinZ) {
+                        
+                        // Region overlaps - need to subtract the delete box
+                        // Generate the resulting boxes after subtraction
+                        List<BlacklistedDimension> subtractedBoxes = subtractBox(dim, delMinX, delMaxX, delMinY, delMaxY, delMinZ, delMaxZ);
+                        updatedSelections.addAll(subtractedBoxes);
+                    } else {
+                        // No overlap - keep it
+                        updatedSelections.add(dim);
+                    }
+                } else {
+                    // Different world - keep it
+                    updatedSelections.add(dim);
                 }
             }
+            
+            this.pendingSelections = updatedSelections;
+            
             // Auto-commit the updated pending selections to the server
             io.icker.factions.client.network.DimensionClientNetworkHandler.commitDimensions(this.pendingSelections);
+            
             resetDeleteMode();
         }
+    }
+    
+    /**
+     * Subtract a delete box from a region, returning resulting boxes
+     * A box subtraction can result in 0-6 boxes (if no overlap, returns empty list)
+     */
+    private List<BlacklistedDimension> subtractBox(BlacklistedDimension region, 
+                                                   int delMinX, int delMaxX, 
+                                                   int delMinY, int delMaxY,
+                                                   int delMinZ, int delMaxZ) {
+        List<BlacklistedDimension> result = new ArrayList<>();
+        
+        // Left box (x: region.minX to delMinX)
+        if (region.minX < delMinX) {
+            result.add(new BlacklistedDimension(
+                region.world,
+                region.minX, region.minY, region.minZ,
+                delMinX - 1, region.maxY, region.maxZ,
+                region.name + "_left"
+            ));
+        }
+        
+        // Right box (x: delMaxX+1 to region.maxX)
+        if (region.maxX > delMaxX) {
+            result.add(new BlacklistedDimension(
+                region.world,
+                delMaxX + 1, region.minY, region.minZ,
+                region.maxX, region.maxY, region.maxZ,
+                region.name + "_right"
+            ));
+        }
+        
+        // Bottom box (y: region.minY to delMinY, x: delMinX to delMaxX)
+        if (region.minY < delMinY) {
+            result.add(new BlacklistedDimension(
+                region.world,
+                Math.max(region.minX, delMinX), region.minY, region.minZ,
+                Math.min(region.maxX, delMaxX), delMinY - 1, region.maxZ,
+                region.name + "_bottom"
+            ));
+        }
+        
+        // Top box (y: delMaxY+1 to region.maxY, x: delMinX to delMaxX)
+        if (region.maxY > delMaxY) {
+            result.add(new BlacklistedDimension(
+                region.world,
+                Math.max(region.minX, delMinX), delMaxY + 1, region.minZ,
+                Math.min(region.maxX, delMaxX), region.maxY, region.maxZ,
+                region.name + "_top"
+            ));
+        }
+        
+        // Front box (z: region.minZ to delMinZ, x: delMinX to delMaxX, y: delMinY to delMaxY)
+        if (region.minZ < delMinZ) {
+            result.add(new BlacklistedDimension(
+                region.world,
+                Math.max(region.minX, delMinX), Math.max(region.minY, delMinY), region.minZ,
+                Math.min(region.maxX, delMaxX), Math.min(region.maxY, delMaxY), delMinZ - 1,
+                region.name + "_front"
+            ));
+        }
+        
+        // Back box (z: delMaxZ+1 to region.maxZ, x: delMinX to delMaxX, y: delMinY to delMaxY)
+        if (region.maxZ > delMaxZ) {
+            result.add(new BlacklistedDimension(
+                region.world,
+                Math.max(region.minX, delMinX), Math.max(region.minY, delMinY), delMaxZ + 1,
+                Math.min(region.maxX, delMaxX), Math.min(region.maxY, delMaxY), region.maxZ,
+                region.name + "_back"
+            ));
+        }
+        
+        return result;
     }
 
     /**
@@ -131,9 +218,8 @@ public class SelectionManager {
      */
     public void resetDeleteMode() {
         this.deleteMode = false;
-        this.deleteModeCounter = 0;
-        this.firstPos = null;
-        this.secondPos = null;
+        this.deleteFirstPos = null;
+        this.deleteSecondPos = null;
     }
 
     /**
@@ -152,6 +238,20 @@ public class SelectionManager {
 
     public BlockPos getSecondPos() {
         return this.secondPos;
+    }
+
+    /**
+     * Get delete mode first position (for rendering red box preview)
+     */
+    public BlockPos getDeleteFirstPos() {
+        return this.deleteFirstPos;
+    }
+
+    /**
+     * Get delete mode second position (for rendering red box preview)
+     */
+    public BlockPos getDeleteSecondPos() {
+        return this.deleteSecondPos;
     }
 
     /**
@@ -179,37 +279,11 @@ public class SelectionManager {
                                 this.pendingSelections.add(dim);
                             }
                         }
-                        org.slf4j.LoggerFactory.getLogger("FactionsClient")
-                            .info("Loaded {} valid dimension blacklists from faction (skipped {} invalid)", 
-                                this.pendingSelections.size(), faction.dimensionBlacklist.size() - this.pendingSelections.size());
                     }
                 }
             }
         } catch (Exception e) {
-            org.slf4j.LoggerFactory.getLogger("FactionsClient").error("Error loading faction dimension blacklist", e);
+            // Silently fail if faction data unavailable
         }
-    }
-
-    /**
-     * Get the region that will be deleted (for rendering)
-     */
-    public io.icker.factions.api.persistents.BlacklistedDimension getDeleteTargetRegion() {
-        if (!this.deleteMode || this.firstPos == null || this.currentWorld == null) {
-            return null;
-        }
-        // Find the region at the delete target position
-        for (io.icker.factions.api.persistents.BlacklistedDimension dim : this.pendingSelections) {
-            if (dim.contains(currentWorld, firstPos.getX(), firstPos.getY(), firstPos.getZ())) {
-                return dim;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Check if delete is confirmed (ready to delete on next right-click)
-     */
-    public boolean isDeleteConfirmed() {
-        return this.deleteMode && this.deleteModeCounter >= 1;
     }
 }

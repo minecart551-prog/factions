@@ -7,11 +7,17 @@ import java.io.DataOutputStream;
 
 import io.icker.factions.api.persistents.User;
 import io.icker.factions.api.persistents.Faction;
+import io.icker.factions.item.FactionsItems;
+import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.util.ActionResult;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 
 /**
  * Handles network communication for dimension blacklist selections
@@ -25,6 +31,14 @@ public class DimensionNetworkHandler {
             (server, player, handler, buf, responseSender) -> {
                 handleCommitPacket(server, player, buf);
             });
+        
+        // Prevent block breaking when holding the dimension blacklist tool
+        AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
+            if (player.getStackInHand(hand).getItem() == FactionsItems.DIMENSION_BLACKLIST_TOOL) {
+                return ActionResult.FAIL; // Prevent the attack
+            }
+            return ActionResult.PASS; // Allow other attacks
+        });
     }
 
     /**
