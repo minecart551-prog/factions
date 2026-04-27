@@ -675,11 +675,8 @@ public class Faction {
         for (User user : getUsers()) {
             user.leaveFaction();
         }
-        for (Relationship rel : relationships) {
-            Faction target = Faction.get(rel.target);
-            if (target != null) {
-                target.removeRelationship(id);
-            }
+        for (Faction other : STORE.values()) {
+            other.relationships.removeIf(rel -> rel.target.equals(id));
         }
         removeAllClaims();
         STORE.remove(id);
@@ -704,8 +701,16 @@ public class Faction {
 
             faction.relationships.removeIf((rel) -> Faction.get(rel.target) == null);
 
+            // Deduplicate invite list
+            java.util.LinkedHashSet<UUID> seen = new java.util.LinkedHashSet<>(faction.invites);
+            if (seen.size() < faction.invites.size()) {
+                faction.invites = new ArrayList<>(seen);
+            }
+
+
             return faction.getUsers().stream().noneMatch((user) -> user.rank == User.Rank.OWNER);
         });
+        save();
     }
 
     public static void save() {

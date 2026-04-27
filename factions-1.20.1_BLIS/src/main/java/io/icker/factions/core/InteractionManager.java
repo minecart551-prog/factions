@@ -2,6 +2,8 @@ package io.icker.factions.core;
 
 import io.icker.factions.FactionsMod;
 import io.icker.factions.api.events.PlayerEvents;
+import io.icker.factions.api.events.ClaimEvents;
+import io.icker.factions.api.events.FactionEvents;
 import io.icker.factions.api.persistents.Claim;
 import io.icker.factions.api.persistents.Faction;
 import io.icker.factions.api.persistents.Relationship;
@@ -56,6 +58,86 @@ public class InteractionManager {
         PlayerEvents.USE_ENTITY.register(InteractionManager::onUseEntity);
         PlayerEvents.USE_INVENTORY.register(InteractionManager::onUseInventory);
         PlayerEvents.PLACE_BLOCK.register(InteractionManager::onPlaceBlock);
+        
+        // Register dimension cleanup listeners
+        ClaimEvents.REMOVE.register(InteractionManager::onClaimRemove);
+        FactionEvents.DISBAND.register(InteractionManager::onFactionDisband);
+    }
+    
+    /**
+     * When a claim is removed, clean up any blacklisted dimensions that overlap with it
+     */
+    private static void onClaimRemove(int chunkX, int chunkZ, String level, Faction faction) {
+        if (faction == null) {
+            return;
+        }
+        
+        // Ensure dimensions are loaded from JSON
+        faction.loadDimensionBlacklistFromJson();
+        
+        if (faction.dimensionBlacklist.isEmpty()) {
+            return;
+        }
+        
+        System.out.println("[Factions DEBUG] Claim removed at chunk " + chunkX + "," + chunkZ + " in level " + level);
+        System.out.println("[Factions DEBUG] Faction has " + faction.dimensionBlacklist.size() + " dimensions before cleanup");
+        
+        // Calculate the block boundaries of the removed claim (chunk to block conversion)
+        int claimMinX = chunkX * 16;
+        int claimMaxX = (chunkX + 1) * 16;
+        int claimMinZ = chunkZ * 16;
+        int claimMaxZ = (chunkZ + 1) * 16;
+        
+        System.out.println("[Factions DEBUG] Claim boundaries: X=" + claimMinX + " to " + claimMaxX + ", Z=" + claimMinZ + " to " + claimMaxZ);
+        
+        // Remove any blacklisted dimensions that overlap with this claim's chunk
+        int removed = 0;
+        for (int i = faction.dimensionBlacklist.size() - 1; i >= 0; i--) {
+            BlacklistedDimension dim = faction.dimensionBlacklist.get(i);
+            
+            // Check if dimension is in the same world/level
+            if (!dim.world.equals(level)) {
+                continue;
+            }
+            
+            // Check if dimension overlaps with the claim
+            // Overlap occurs if: minX < claimMaxX AND maxX > claimMinX AND minZ < claimMaxZ AND maxZ > claimMinZ
+            if (dim.minX < claimMaxX && dim.maxX > claimMinX && 
+                dim.minZ < claimMaxZ && dim.maxZ > claimMinZ) {
+                
+                System.out.println("[Factions DEBUG] Removing overlapping dimension: X=" + dim.minX + " to " + dim.maxX + ", Z=" + dim.minZ + " to " + dim.maxZ);
+                faction.dimensionBlacklist.remove(i);
+                removed++;
+            }
+        }
+        
+        System.out.println("[Factions DEBUG] Removed " + removed + " dimensions, " + faction.dimensionBlacklist.size() + " remaining");
+        
+        if (removed > 0) {
+            System.out.println("[Factions] Removed " + removed + " blacklisted dimensions for faction " + faction.getName() + " due to claim removal");
+            Faction.save();
+        }
+    }
+    
+    /**
+     * When a faction is disbanded, clear all its blacklisted dimensions
+     */
+    private static void onFactionDisband(Faction faction) {
+        if (faction == null) {
+            return;
+        }
+        
+        // Ensure dimensions are loaded from JSON
+        faction.loadDimensionBlacklistFromJson();
+        
+        if (faction.dimensionBlacklist.isEmpty()) {
+            return;
+        }
+        
+        int count = faction.dimensionBlacklist.size();
+        faction.dimensionBlacklist.clear();
+        System.out.println("[Factions] Cleared " + count + " blacklisted dimensions for disbanded faction " + faction.getName());
+        Faction.save();
     }
 
     private static boolean onBreakBlock(World world, PlayerEntity player, BlockPos pos,

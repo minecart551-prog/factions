@@ -56,7 +56,7 @@ public class DimensionBlacklistRenderer {
         // Extract and render boundary faces with semi-transparent fill (no internal edges)
         if (!allRegions.isEmpty()) {
             List<FaceMerger.Face> boundaryFaces = FaceMerger.extractAndMergeBoundaryFaces(grid);
-            renderBoundaryFacesWithFill(boundaryFaces, camX, camY, camZ, 0.0f, 1.0f, 0.0f, 0.25f, matrices);
+            renderBoundaryFacesWithFill(boundaryFaces, camX, camY, camZ, 0.0f, 1.0f, 0.0f, 0.15f, matrices);
         }
 
         // Render current selection (first/second positions) as GREEN filled boxes
@@ -73,13 +73,13 @@ public class DimensionBlacklistRenderer {
                 int maxZ = Math.max(firstPos.getZ(), secondPos.getZ()) + 1;
                 
                 renderFilledDeleteBox(minX - camX, minY - camY, minZ - camZ, maxX - camX, maxY - camY, maxZ - camZ,
-                                     0.0f, 1.0f, 0.0f, 0.25f, matrices);
+                                     0.0f, 1.0f, 0.0f, 0.15f, matrices);
             } else {
                 int x = firstPos.getX();
                 int y = firstPos.getY();
                 int z = firstPos.getZ();
                 renderFilledDeleteBox(x - camX, y - camY, z - camZ, x + 1 - camX, y + 1 - camY, z + 1 - camZ,
-                                     0.0f, 1.0f, 0.0f, 0.25f, matrices);
+                                     0.0f, 1.0f, 0.0f, 0.15f, matrices);
             }
         }
 
@@ -101,14 +101,14 @@ public class DimensionBlacklistRenderer {
                     renderFilledDeleteBox(
                         minX - camX, minY - camY, minZ - camZ,
                         maxX - camX, maxY - camY, maxZ - camZ,
-                        1.0f, 0.0f, 0.0f, 0.25f, matrices
+                        1.0f, 0.0f, 0.0f, 0.15f, matrices
                     );
                 } else {
                     // Only first position set - show shaded single block
                     int x = delFirstPos.getX();
                     int y = delFirstPos.getY();
                     int z = delFirstPos.getZ();
-                    renderFilledDeleteBox(x - camX, y - camY, z - camZ, x + 1 - camX, y + 1 - camY, z + 1 - camZ, 1.0f, 0.0f, 0.0f, 0.25f, matrices);
+                    renderFilledDeleteBox(x - camX, y - camY, z - camZ, x + 1 - camX, y + 1 - camY, z + 1 - camZ, 1.0f, 0.0f, 0.0f, 0.15f, matrices);
                 }
             }
         }
@@ -131,6 +131,9 @@ public class DimensionBlacklistRenderer {
         // Enable blending for transparency
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
+        
+        // Disable depth test to render through blocks (X-ray vision)
+        RenderSystem.disableDepthTest();
         
         // Disable backface culling so we can see both sides
         RenderSystem.disableCull();
@@ -159,9 +162,10 @@ public class DimensionBlacklistRenderer {
         
         tessellator.draw();
         
-        // Disable blending and re-enable backface culling
+        // Disable blending, re-enable backface culling, and re-enable depth test
         RenderSystem.disableBlend();
         RenderSystem.enableCull();
+        RenderSystem.enableDepthTest();
     }
     
     /**
@@ -194,6 +198,9 @@ public class DimensionBlacklistRenderer {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         
+        // Disable depth test to render through blocks (X-ray vision)
+        RenderSystem.disableDepthTest();
+        
         // Disable backface culling so we can see both sides
         RenderSystem.disableCull();
         
@@ -212,9 +219,10 @@ public class DimensionBlacklistRenderer {
         
         tessellator.draw();
         
-        // Disable blending and re-enable backface culling
+        // Disable blending, re-enable backface culling, and re-enable depth test
         RenderSystem.disableBlend();
         RenderSystem.enableCull();
+        RenderSystem.enableDepthTest();
     }
     
     /**

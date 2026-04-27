@@ -5,6 +5,7 @@ import com.flowpowered.math.vector.Vector2i;
 
 import de.bluecolored.bluemap.api.BlueMapAPI;
 import de.bluecolored.bluemap.api.BlueMapMap;
+import de.bluecolored.bluemap.api.BlueMapWorld;
 import de.bluecolored.bluemap.api.markers.ExtrudeMarker;
 import de.bluecolored.bluemap.api.markers.Marker;
 import de.bluecolored.bluemap.api.markers.MarkerSet;
@@ -24,6 +25,7 @@ import net.minecraft.server.world.ServerWorld;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -96,8 +98,13 @@ public class BlueMapWrapper {
                         ClaimGrouper.convertClaimsToLineSegmentGroups(entry.getValue())) {
                     List<List<Vector2i>> outlines =
                             ClaimGrouper.convertLineSegmentsToOutlines(group);
+                    if (outlines.isEmpty() || outlines.get(0) == null) {
+                        FactionsMod.LOGGER.warn("Skipping malformed claim group for faction: " + faction.getName());
+                        continue;
+                    }
                     List<Shape> shapes =
                             outlines.stream()
+                                    .filter(hole -> hole != null)
                                     .map(
                                             (hole) ->
                                                     new Shape(
@@ -116,9 +123,18 @@ public class BlueMapWrapper {
 
                     if (markerSet == null) {
                         ServerWorld world = WorldUtils.getWorld(level);
+                        if (world == null) {
+                            FactionsMod.LOGGER.warn("Skipping claims for unknown world: " + level);
+                            continue;
+                        }
+                        Optional<BlueMapWorld> bmWorld = api.getWorld(world);
+                        if (bmWorld.isEmpty()) {
+                            FactionsMod.LOGGER.warn("BlueMap is not rendering world: " + level);
+                            continue;
+                        }
                         markerSet = new MarkerSet("factions-" + level);
 
-                        for (BlueMapMap map : api.getWorld(world).get().getMaps()) {
+                        for (BlueMapMap map : bmWorld.get().getMaps()) {
                             map.getMarkerSets().put("factions-" + level, markerSet);
                         }
 
@@ -127,6 +143,8 @@ public class BlueMapWrapper {
 
                     int minY = FactionsMod.CONFIG.BLUEMAP.MARKER_MIN_Y;
                     int maxY = FactionsMod.CONFIG.BLUEMAP.MARKER_MAX_Y;
+                    Integer colorValue = faction.getColor().getColorValue();
+                    int rgb = colorValue != null ? colorValue : 0xFFFFFF;
                     ExtrudeMarker marker =
                             ExtrudeMarker.builder()
                                     .position(
@@ -135,14 +153,8 @@ public class BlueMapWrapper {
                                             (double) outlines.get(0).get(0).getY())
                                     .shape(shapes.remove(0), minY, maxY)
                                     .holes(shapes.toArray(new Shape[0]))
-                                    .fillColor(
-                                            new Color(
-                                                    faction.getColor().getColorValue()
-                                                            | 0x30000000))
-                                    .lineColor(
-                                            new Color(
-                                                    faction.getColor().getColorValue()
-                                                            | 0x70000000))
+                                    .fillColor(new Color(rgb | 0x30000000))
+                                    .lineColor(new Color(rgb | 0x70000000))
                                     .label(faction.getName())
                                     .detail(info)
                                     .build();
@@ -165,9 +177,18 @@ public class BlueMapWrapper {
 
         if (markerSet == null) {
             ServerWorld world = WorldUtils.getWorld(home.level);
+            if (world == null) {
+                FactionsMod.LOGGER.warn("Skipping home marker for unknown world: " + home.level);
+                return;
+            }
+            Optional<BlueMapWorld> bmWorld = api.getWorld(world);
+            if (bmWorld.isEmpty()) {
+                FactionsMod.LOGGER.warn("BlueMap is not rendering world: " + home.level);
+                return;
+            }
             markerSet = new MarkerSet("factions-" + home.level);
 
-            for (BlueMapMap map : api.getWorld(world).get().getMaps()) {
+            for (BlueMapMap map : bmWorld.get().getMaps()) {
                 map.getMarkerSets().put("factions-" + home.level, markerSet);
             }
 
@@ -188,7 +209,7 @@ public class BlueMapWrapper {
             HtmlMarker nameMarker = HtmlMarker.builder()
                     .label(faction.getName() + "'s Home")
                     .position(home.x, home.y, home.z)
-                    .html("<div style='line-height: 2em; font-size: 2em; color: " + faction.getColor().getName() + "; transform: translate(-50%, -50%);'>" + faction.getName() + "</div>")
+                    .html("<div style='line-height: 2em; font-size: 2em; color: " + (faction.getColor().getName() != null ? faction.getColor().getName() : "white") + "; transform: translate(-50%, -50%);'>" + faction.getName() + "</div>")
                     .anchor(0, 0)
                     .listed(true)
                     .minDistance(50)

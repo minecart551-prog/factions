@@ -61,6 +61,7 @@ public class Claim {
     public static void audit() {
         STORE.values().removeIf((claim) -> Faction.get(claim.factionID) == null
                 || !WorldUtils.isValid(claim.level));
+                save();
     }
 
     public static void add(Claim claim) {

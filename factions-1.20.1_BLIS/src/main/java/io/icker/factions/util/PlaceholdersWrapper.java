@@ -62,7 +62,8 @@ public class PlaceholdersWrapper {
             if (!member.isInFaction())
                 return FORMATTED_NULL;
 
-            return Text.of(member.getFaction().getColor().getName());
+            String colorName = member.getFaction().getColor().getName();
+            return Text.of(colorName != null ? colorName : "none");
         });
 
         register("description", (member) -> {

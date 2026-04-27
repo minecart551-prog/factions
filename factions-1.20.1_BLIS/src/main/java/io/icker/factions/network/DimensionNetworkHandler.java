@@ -57,14 +57,17 @@ public class DimensionNetworkHandler {
             try {
                 User user = User.get(player.getUuid());
                 if (user == null) {
-    
                     return;
                 }
                 
                 Faction faction = user.getFaction();
                 if (faction == null) {
-
                     return;
+                }
+                
+                // Only OWNER, COMMANDER, LEADER can see/edit dimension blacklist
+                if (user.rank != User.Rank.OWNER && user.rank != User.Rank.COMMANDER && user.rank != User.Rank.LEADER) {
+                    return;  // Silently reject - non-leadership can't access dimensions
                 }
                 
                 // Send the current dimensions from the server to the client
@@ -138,6 +141,13 @@ public class DimensionNetworkHandler {
                             return;
                         }
                         
+                        // Only OWNER, COMMANDER, LEADER can edit dimension blacklist
+                        if (user.rank != User.Rank.OWNER && user.rank != User.Rank.COMMANDER && user.rank != User.Rank.LEADER) {
+                            player.sendMessage(
+                                net.minecraft.text.Text.literal("§cOnly faction leadership can edit dimension blacklist!"), false);
+                            return;
+                        }
+                        
                         // Replace the entire list with what the client sent (to ensure deletions are reflected)
                         faction.dimensionBlacklist.clear();
                         faction.dimensionBlacklist.addAll(packet.dimensions);
@@ -147,11 +157,6 @@ public class DimensionNetworkHandler {
                         // Trigger MODIFY event and save all factions
                         io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
                         Faction.save();
-                        
-
-                        
-                        player.sendMessage(
-                            net.minecraft.text.Text.literal("§6Dimension selections committed!"), false);
                     } else {
                         player.sendMessage(
                             net.minecraft.text.Text.literal("§cError: Failed to parse NBT data!"), false);

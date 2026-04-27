@@ -21,6 +21,8 @@ public class SelectionManager {
     private boolean deleteMode = false;
     private BlockPos deleteFirstPos = null;  // First position for delete box
     private BlockPos deleteSecondPos = null; // Second position for delete box
+    private String lastClaimError = null;   // Last error message for claim validation
+    private long lastClaimErrorTime = 0;    // Timestamp for error message
 
     private SelectionManager() {
     }
@@ -44,11 +46,15 @@ public class SelectionManager {
      */
     private boolean isRegionInFactionClaims(BlacklistedDimension region) {
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null) return false;
+        if (mc.player == null) {
+            setClaimError("§cNo player found");
+            return false;
+        }
         
         // Get player's faction
         io.icker.factions.api.persistents.User user = io.icker.factions.api.persistents.User.get(mc.player.getUuid());
         if (user == null || user.getFaction() == null) {
+            setClaimError("§cYou must be in a faction");
             return false;
         }
         
@@ -72,12 +78,32 @@ public class SelectionManager {
             for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
                 io.icker.factions.api.persistents.Claim claim = io.icker.factions.api.persistents.Claim.get(cx, cz, worldStr);
                 if (claim == null || !claim.factionID.equals(faction.getID())) {
+                    setClaimError("§cSelection outside faction territory");
                     return false; // Chunk not claimed or claimed by different faction
                 }
             }
         }
         
         return true;
+    }
+    
+    /**
+     * Set claim error message for hotbar notification
+     */
+    private void setClaimError(String message) {
+        this.lastClaimError = message;
+        this.lastClaimErrorTime = System.currentTimeMillis();
+    }
+    
+    /**
+     * Get claim error message if still recent (within 3 seconds)
+     */
+    public String getLastClaimError() {
+        if (lastClaimError != null && System.currentTimeMillis() - lastClaimErrorTime < 3000) {
+            return lastClaimError;
+        }
+        lastClaimError = null;
+        return null;
     }
 
     /**

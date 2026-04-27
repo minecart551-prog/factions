@@ -25,10 +25,28 @@ public class DimensionBlacklistItemHandler {
     private static boolean lastRightClickPressed = false;
     private static int selectionStep = 0; // 0: not selecting, 1: first pos set, 2: region created
     private static boolean toolEquipped = false; // Track if tool is currently equipped
+    private static boolean permissionDenied = false; // Track if permission was denied
 
     public static void register() {
         ClientTickEvents.START_CLIENT_TICK.register(DimensionBlacklistItemHandler::onClientTick);
         WorldRenderEvents.LAST.register(DimensionBlacklistItemHandler::onWorldRenderLast);
+    }
+
+    /**
+     * Check if player has permission to use dimension blacklist tool (OWNER, COMMANDER, or LEADER)
+     */
+    private static boolean hasPermission(MinecraftClient mc) {
+        if (mc.player == null) return false;
+        
+        io.icker.factions.api.persistents.User user = io.icker.factions.api.persistents.User.get(mc.player.getUuid());
+        if (user == null) return false;
+        
+        io.icker.factions.api.persistents.Faction faction = user.getFaction();
+        if (faction == null) return false;
+        
+        return user.rank == io.icker.factions.api.persistents.User.Rank.OWNER
+            || user.rank == io.icker.factions.api.persistents.User.Rank.COMMANDER
+            || user.rank == io.icker.factions.api.persistents.User.Rank.LEADER;
     }
 
     /**
@@ -40,18 +58,27 @@ public class DimensionBlacklistItemHandler {
         // Check if tool is being equipped/unequipped
         boolean holdingTool = isHoldingTool(mc.player);
         if (holdingTool && !toolEquipped) {
-            // Tool just equipped - request sync from server for fresh data
+            // Tool just equipped - check permissions and request sync
             toolEquipped = true;
+            permissionDenied = false;
+            
+            if (!hasPermission(mc)) {
+                mc.player.sendMessage(net.minecraft.text.Text.of("§cOnly faction leadership can use the dimension blacklist tool!"), true);
+                permissionDenied = true;
+                return;
+            }
+            
             io.icker.factions.client.network.DimensionClientNetworkHandler.requestDimensionSync();
         } else if (!holdingTool && toolEquipped) {
             // Tool just unequipped - clear selection state but preserve pending selections
             toolEquipped = false;
+            permissionDenied = false;
             lastLeftClickPressed = false;
             lastRightClickPressed = false;
             selectionStep = 0;
         }
         
-        if (!holdingTool) {
+        if (!holdingTool || permissionDenied) {
             lastLeftClickPressed = false;
             lastRightClickPressed = false;
             selectionStep = 0;
@@ -60,8 +87,11 @@ public class DimensionBlacklistItemHandler {
 
         // Update action bar with current state
         SelectionManager selectionMgr = SelectionManager.getInstance();
+        String lastClaimError = selectionMgr.getLastClaimError();
         
-        if (selectionMgr.isDeleteMode()) {
+        if (lastClaimError != null) {
+            mc.player.sendMessage(Text.of(lastClaimError), true);
+        } else if (selectionMgr.isDeleteMode()) {
             BlockPos delSecondPos = selectionMgr.getDeleteSecondPos();
             if (delSecondPos != null) {
                 mc.player.sendMessage(Text.of("§cDeletion complete!"), true);
