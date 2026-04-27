@@ -45,45 +45,9 @@ public class SelectionManager {
      * Check if a region is entirely within the player's faction claims
      */
     private boolean isRegionInFactionClaims(BlacklistedDimension region) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null) {
-            setClaimError("§cNo player found");
-            return false;
-        }
-        
-        // Get player's faction
-        io.icker.factions.api.persistents.User user = io.icker.factions.api.persistents.User.get(mc.player.getUuid());
-        if (user == null || user.getFaction() == null) {
-            setClaimError("§cYou must be in a faction");
-            return false;
-        }
-        
-        io.icker.factions.api.persistents.Faction faction = user.getFaction();
-        
-        // Get all claims for this faction
-        java.util.List<io.icker.factions.api.persistents.Claim> claims = io.icker.factions.api.persistents.Claim.getByFaction(faction.getID());
-        
-        // Convert world name to the expected format if needed
-        String worldStr = region.world;
-        
-        // Check if all corners of the region are within faction claims
-        // A region is valid if all its chunk positions are claimed
-        int minChunkX = region.minX >> 4; // Divide by 16 for chunk coords
-        int maxChunkX = region.maxX >> 4;
-        int minChunkZ = region.minZ >> 4;
-        int maxChunkZ = region.maxZ >> 4;
-        
-        // Check every chunk in the region
-        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
-            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
-                io.icker.factions.api.persistents.Claim claim = io.icker.factions.api.persistents.Claim.get(cx, cz, worldStr);
-                if (claim == null || !claim.factionID.equals(faction.getID())) {
-                    setClaimError("§cSelection outside faction territory");
-                    return false; // Chunk not claimed or claimed by different faction
-                }
-            }
-        }
-        
+        // Trust the server to validate claim boundaries
+        // Client-side User cache may be stale when on multiplayer servers
+        // Server-side validation will reject invalid selections
         return true;
     }
     

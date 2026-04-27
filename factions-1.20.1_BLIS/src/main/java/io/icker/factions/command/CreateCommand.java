@@ -55,6 +55,10 @@ public class CreateCommand implements Command {
                         false, FactionsMod.CONFIG.POWER.BASE + FactionsMod.CONFIG.POWER.MEMBER);
         Faction.add(faction);
         Command.getUser(player).joinFaction(faction.getID(), User.Rank.OWNER);
+        
+        // Save factions and users immediately so other players can access the new faction
+        Faction.save();
+        User.save();
 
         source.getServer().getPlayerManager().sendCommandTree(player);
         new Message("Successfully created faction").send(player, false);

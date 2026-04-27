@@ -25,28 +25,10 @@ public class DimensionBlacklistItemHandler {
     private static boolean lastRightClickPressed = false;
     private static int selectionStep = 0; // 0: not selecting, 1: first pos set, 2: region created
     private static boolean toolEquipped = false; // Track if tool is currently equipped
-    private static boolean permissionDenied = false; // Track if permission was denied
 
     public static void register() {
         ClientTickEvents.START_CLIENT_TICK.register(DimensionBlacklistItemHandler::onClientTick);
         WorldRenderEvents.LAST.register(DimensionBlacklistItemHandler::onWorldRenderLast);
-    }
-
-    /**
-     * Check if player has permission to use dimension blacklist tool (OWNER, COMMANDER, or LEADER)
-     */
-    private static boolean hasPermission(MinecraftClient mc) {
-        if (mc.player == null) return false;
-        
-        io.icker.factions.api.persistents.User user = io.icker.factions.api.persistents.User.get(mc.player.getUuid());
-        if (user == null) return false;
-        
-        io.icker.factions.api.persistents.Faction faction = user.getFaction();
-        if (faction == null) return false;
-        
-        return user.rank == io.icker.factions.api.persistents.User.Rank.OWNER
-            || user.rank == io.icker.factions.api.persistents.User.Rank.COMMANDER
-            || user.rank == io.icker.factions.api.persistents.User.Rank.LEADER;
     }
 
     /**
@@ -58,27 +40,19 @@ public class DimensionBlacklistItemHandler {
         // Check if tool is being equipped/unequipped
         boolean holdingTool = isHoldingTool(mc.player);
         if (holdingTool && !toolEquipped) {
-            // Tool just equipped - check permissions and request sync
+            // Tool just equipped - request sync from server for fresh data
             toolEquipped = true;
-            permissionDenied = false;
-            
-            if (!hasPermission(mc)) {
-                mc.player.sendMessage(net.minecraft.text.Text.of("§cOnly faction leadership can use the dimension blacklist tool!"), true);
-                permissionDenied = true;
-                return;
-            }
-            
             io.icker.factions.client.network.DimensionClientNetworkHandler.requestDimensionSync();
+            io.icker.factions.client.network.DimensionClientNetworkHandler.requestUserSync();
         } else if (!holdingTool && toolEquipped) {
             // Tool just unequipped - clear selection state but preserve pending selections
             toolEquipped = false;
-            permissionDenied = false;
             lastLeftClickPressed = false;
             lastRightClickPressed = false;
             selectionStep = 0;
         }
         
-        if (!holdingTool || permissionDenied) {
+        if (!holdingTool) {
             lastLeftClickPressed = false;
             lastRightClickPressed = false;
             selectionStep = 0;
@@ -89,9 +63,36 @@ public class DimensionBlacklistItemHandler {
         SelectionManager selectionMgr = SelectionManager.getInstance();
         String lastClaimError = selectionMgr.getLastClaimError();
         
-        if (lastClaimError != null) {
-            mc.player.sendMessage(Text.of(lastClaimError), true);
-        } else if (selectionMgr.isDeleteMode()) {
+        // Check user state and show appropriate message
+        io.icker.factions.network.UserSyncPacket userData = 
+            io.icker.factions.client.network.UserClientSyncHandler.getCachedUserData();
+        
+        if (!userData.inFaction) {
+            mc.player.sendMessage(Text.of("§cYou must be in a faction to use this tool!"), true);
+            selectionStep = 0;
+            lastLeftClickPressed = false;
+            lastRightClickPressed = false;
+            return;
+        }
+        
+        if (!userData.hasClaims) {
+            mc.player.sendMessage(Text.of("§cYour faction must have claimed chunks to use this tool!"), true);
+            selectionStep = 0;
+            lastLeftClickPressed = false;
+            lastRightClickPressed = false;
+            return;
+        }
+        
+        if (!userData.canEditDimensions) {
+            mc.player.sendMessage(Text.of("§cOnly faction leadership can edit dimension blacklist!"), true);
+            selectionStep = 0;
+            lastLeftClickPressed = false;
+            lastRightClickPressed = false;
+            return;
+        }
+        
+        // Show status messages based on selection state
+        if (selectionMgr.isDeleteMode()) {
             BlockPos delSecondPos = selectionMgr.getDeleteSecondPos();
             if (delSecondPos != null) {
                 mc.player.sendMessage(Text.of("§cDeletion complete!"), true);
@@ -134,6 +135,12 @@ public class DimensionBlacklistItemHandler {
      */
     private static void handleLeftClick(MinecraftClient mc) {
         if (mc.player == null || mc.world == null) return;
+        
+        // Verify permissions still valid
+        io.icker.factions.network.UserSyncPacket userData = 
+            io.icker.factions.client.network.UserClientSyncHandler.getCachedUserData();
+        if (!userData.canEditDimensions) return;
+        
         if (mc.crosshairTarget == null || mc.crosshairTarget.getType() != HitResult.Type.BLOCK) return;
 
         BlockHitResult blockHit = (BlockHitResult) mc.crosshairTarget;
@@ -157,12 +164,17 @@ public class DimensionBlacklistItemHandler {
      * Handle right-click (delete mode)
      */
     private static void handleRightClick(MinecraftClient mc) {
+        if (mc.player == null || mc.world == null) return;
+        
+        // Verify permissions still valid
+        io.icker.factions.network.UserSyncPacket userData = 
+            io.icker.factions.client.network.UserClientSyncHandler.getCachedUserData();
+        if (!userData.canEditDimensions) return;
+        
         if (mc.crosshairTarget == null || mc.crosshairTarget.getType() != HitResult.Type.BLOCK) return;
 
         BlockHitResult blockHit = (BlockHitResult) mc.crosshairTarget;
         BlockPos pos = blockHit.getBlockPos();
-        if (mc.player == null || mc.world == null) return;
-        
         String worldKey = mc.world.getRegistryKey().getValue().toString();
         SelectionManager selectionMgr = SelectionManager.getInstance();
         

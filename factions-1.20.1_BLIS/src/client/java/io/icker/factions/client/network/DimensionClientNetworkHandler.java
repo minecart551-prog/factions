@@ -59,4 +59,20 @@ public class DimensionClientNetworkHandler {
             e.printStackTrace();
         }
     }
+    
+    /**
+     * Request the server to send the current user faction data
+     */
+    public static void requestUserSync() {
+        try {
+            io.netty.buffer.ByteBuf byteBuf = io.netty.buffer.Unpooled.buffer();
+            PacketByteBuf buf = new PacketByteBuf(byteBuf);
+            
+            ClientPlayNetworking.send(io.icker.factions.network.DimensionNetworkHandler.USER_SYNC_REQUEST_PACKET_ID, buf);
+            System.out.println("[Factions] Sent user sync request to server");
+        } catch (Exception e) {
+            System.err.println("[Factions] Error sending user sync request:");
+            e.printStackTrace();
+        }
+    }
 }
