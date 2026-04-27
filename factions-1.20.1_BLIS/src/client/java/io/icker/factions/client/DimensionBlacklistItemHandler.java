@@ -1,8 +1,5 @@
 package io.icker.factions.client;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.icker.factions.client.event.SelectionManager;
 import io.icker.factions.client.render.DimensionBlacklistRenderer;
 import net.fabricmc.api.EnvType;
@@ -10,22 +7,17 @@ import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.render.Tessellator;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.text.Text;
-import com.mojang.blaze3d.systems.RenderSystem;
 
 /**
  * Handles item interactions for the dimension blacklist tool
  */
 @Environment(EnvType.CLIENT)
 public class DimensionBlacklistItemHandler {
-    private static final Logger LOGGER = LoggerFactory.getLogger("FactionsClient");
     private static long lastLeftClickTime = 0;
     private static long lastRightClickTime = 0;
     private static final long CLICK_COOLDOWN = 100;
@@ -70,23 +62,18 @@ public class DimensionBlacklistItemHandler {
         SelectionManager selectionMgr = SelectionManager.getInstance();
         
         if (selectionMgr.isDeleteMode()) {
-            // Show delete mode state
-            BlockPos delFirstPos = selectionMgr.getDeleteFirstPos();
             BlockPos delSecondPos = selectionMgr.getDeleteSecondPos();
             if (delSecondPos != null) {
                 mc.player.sendMessage(Text.of("§cDeletion complete!"), true);
-            } else if (delFirstPos != null) {
-                mc.player.sendMessage(Text.of("§cDelete mode: First position set at " + delFirstPos + " - Right click another block to delete"), true);
+            } else {
+                mc.player.sendMessage(Text.of("§cRight-click second corner to delete"), true);
             }
         } else if (selectionStep == 0) {
-            mc.player.sendMessage(Text.of("§eLeft click to add first position"), true);
+            mc.player.sendMessage(Text.of("§eLeft-click first corner"), true);
         } else if (selectionStep == 1) {
-            BlockPos firstPos = selectionMgr.getFirstPos();
-            mc.player.sendMessage(Text.of("§eFirst position: " + firstPos + " - Left click another block"), true);
+            mc.player.sendMessage(Text.of("§eLeft-click second corner"), true);
         } else if (selectionStep == 2) {
-            BlockPos firstPos = selectionMgr.getFirstPos();
-            BlockPos secondPos = selectionMgr.getSecondPos();
-            mc.player.sendMessage(Text.of("§aRegion: " + firstPos + " to " + secondPos + " - Left click for next"), true);
+            mc.player.sendMessage(Text.of("§aRegion created - Left-click next"), true);
         }
 
         // Handle left-click (attack key)

@@ -29,7 +29,6 @@ public class Faction {
         for (Faction faction : STORE.values()) {
             // If old data exists, migrate it to JSON format
             if (!faction.dimensionBlacklistOld.isEmpty()) {
-                System.out.println("[Factions] Migrating " + faction.dimensionBlacklistOld.size() + " dimensions for faction " + faction.name + " from old format to JSON");
                 faction.dimensionBlacklist = new ArrayList<>(faction.dimensionBlacklistOld);
                 faction.saveDimensionBlacklistToJson();
                 faction.dimensionBlacklistOld.clear(); // Clear old data so it doesn't get saved again
@@ -826,7 +825,6 @@ public class Faction {
     public void saveDimensionBlacklistToJson() {
         try {
             dimensionBlacklistJson = GSON.toJson(dimensionBlacklist);
-            System.out.println("[Factions] Saved " + dimensionBlacklist.size() + " dimensions to JSON");
         } catch (Exception e) {
             System.err.println("[Factions] Error saving dimension blacklist to JSON:");
             e.printStackTrace();

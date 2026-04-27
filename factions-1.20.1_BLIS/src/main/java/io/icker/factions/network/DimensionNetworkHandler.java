@@ -57,18 +57,17 @@ public class DimensionNetworkHandler {
             try {
                 User user = User.get(player.getUuid());
                 if (user == null) {
-                    System.out.println("[Factions] Sync request: User not found");
+    
                     return;
                 }
                 
                 Faction faction = user.getFaction();
                 if (faction == null) {
-                    System.out.println("[Factions] Sync request: Faction not found");
+
                     return;
                 }
                 
                 // Send the current dimensions from the server to the client
-                System.out.println("[Factions] Sync request: Sending " + faction.dimensionBlacklist.size() + " dimensions to player");
                 syncDimensionsToPlayer(player, faction.dimensionBlacklist);
             } catch (Exception e) {
                 System.err.println("[Factions] Error handling sync request:");
@@ -110,7 +109,7 @@ public class DimensionNetworkHandler {
             // The buffer will be released after this handler returns
             byte[] nbtBytes = new byte[buf.readableBytes()];
             buf.readBytes(nbtBytes);
-            System.out.println("[Factions] Received " + nbtBytes.length + " bytes of NBT data");
+
             
             // Now queue the actual work on the server thread
             server.execute(() -> {
@@ -122,14 +121,7 @@ public class DimensionNetworkHandler {
                     if (nbtCompound != null) {
                         DimensionCommitPacket packet = DimensionCommitPacket.fromNbt(nbtCompound);
                         
-                        // Debug: log what we received
-                        System.out.println("[Factions] Parsed packet with " + packet.dimensions.size() + " dimensions:");
-                        for (int i = 0; i < packet.dimensions.size(); i++) {
-                            io.icker.factions.api.persistents.BlacklistedDimension dim = packet.dimensions.get(i);
-                            System.out.println("[Factions]   Dim " + i + ": world=" + dim.world + ", name=" + dim.name + 
-                                ", coords=[" + dim.minX + "," + dim.minY + "," + dim.minZ + "] to [" + 
-                                dim.maxX + "," + dim.maxY + "," + dim.maxZ + "]");
-                        }
+    
                         
                         // Get faction and save dimensions
                         User user = User.get(player.getUuid());
@@ -150,21 +142,13 @@ public class DimensionNetworkHandler {
                         faction.dimensionBlacklist.clear();
                         faction.dimensionBlacklist.addAll(packet.dimensions);
                         
-                        System.out.println("[Factions] Before save - faction has " + faction.dimensionBlacklist.size() + " dimensions:");
-                        for (int i = 0; i < faction.dimensionBlacklist.size(); i++) {
-                            io.icker.factions.api.persistents.BlacklistedDimension dim = faction.dimensionBlacklist.get(i);
-                            System.out.println("[Factions]   Dim " + i + ": world=" + dim.world + ", name=" + dim.name);
-                        }
+
                         
                         // Trigger MODIFY event and save all factions
                         io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
                         Faction.save();
                         
-                        System.out.println("[Factions] After save - faction has " + faction.dimensionBlacklist.size() + " dimensions:");
-                        for (int i = 0; i < faction.dimensionBlacklist.size(); i++) {
-                            io.icker.factions.api.persistents.BlacklistedDimension dim = faction.dimensionBlacklist.get(i);
-                            System.out.println("[Factions]   Dim " + i + ": world=" + dim.world + ", name=" + dim.name);
-                        }
+
                         
                         player.sendMessage(
                             net.minecraft.text.Text.literal("§6Dimension selections committed!"), false);
