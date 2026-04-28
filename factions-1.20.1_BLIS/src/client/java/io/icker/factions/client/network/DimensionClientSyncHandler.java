@@ -48,10 +48,10 @@ public class DimensionClientSyncHandler {
                 SelectionManager selectionMgr = SelectionManager.getInstance();
                 selectionMgr.setPendingSelections(validDimensions);
                 
-                System.out.println("[Factions] Synced " + validDimensions.size() + " valid dimensions from server (received " + packet.dimensions.size() + " total)");
+
             }
         } catch (Exception e) {
-            System.err.println("[Factions] Error handling dimension sync packet:");
+
             e.printStackTrace();
         }
     }

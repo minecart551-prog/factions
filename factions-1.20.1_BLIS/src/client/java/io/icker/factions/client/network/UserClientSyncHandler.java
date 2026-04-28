@@ -34,12 +34,8 @@ public class UserClientSyncHandler {
             
             if (nbtCompound != null) {
                 cachedUserData = UserSyncPacket.fromNbt(nbtCompound);
-                System.out.println("[Factions] Synced user data: inFaction=" + cachedUserData.inFaction + 
-                    ", hasClaims=" + cachedUserData.hasClaims + 
-                    ", canEditDimensions=" + cachedUserData.canEditDimensions);
             }
         } catch (Exception e) {
-            System.err.println("[Factions] Error handling user sync packet:");
             e.printStackTrace();
         }
     }

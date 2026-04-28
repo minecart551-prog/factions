@@ -30,7 +30,7 @@ public class DimensionSyncPacket {
 
         for (BlacklistedDimension dim : this.dimensions) {
             if (dim == null || dim.world == null) {
-                System.out.println("[Factions] Warning: Skipping null dimension or dimension with null world during sync");
+
                 continue;
             }
             

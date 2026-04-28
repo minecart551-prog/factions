@@ -75,14 +75,14 @@ public class DimensionNetworkHandler {
                 
                 // Only OWNER, COMMANDER, LEADER can see/edit dimension blacklist
                 if (user.rank != User.Rank.OWNER && user.rank != User.Rank.COMMANDER && user.rank != User.Rank.LEADER) {
-                    System.out.println("[Factions DEBUG] User does not have permission (rank=" + user.rank + ")");
+
                     return;  // Silently reject - non-leadership can't access dimensions
                 }
                 
                 // Send the current dimensions from the server to the client
                 syncDimensionsToPlayer(player, faction.dimensionBlacklist);
             } catch (Exception e) {
-                System.err.println("[Factions] Error handling sync request:");
+    
                 e.printStackTrace();
             }
         });
@@ -106,7 +106,7 @@ public class DimensionNetworkHandler {
             
             ServerPlayNetworking.send(player, SYNC_PACKET_ID, buf);
         } catch (Exception e) {
-            System.err.println("[Factions] Error sending dimension sync packet:");
+
             e.printStackTrace();
         }
     }
@@ -159,6 +159,8 @@ public class DimensionNetworkHandler {
                         if (!areAllDimensionsInClaims(faction, packet.dimensions)) {
                             player.sendMessage(
                                 net.minecraft.text.Text.literal("§cAll selected regions must be within your faction's claimed chunks!"), false);
+                            // Send back the authoritative dimensions from the server so client discards the invalid ones
+                            syncDimensionsToPlayer(player, faction.dimensionBlacklist);
                             return;
                         }
                         
@@ -166,24 +168,25 @@ public class DimensionNetworkHandler {
                         faction.dimensionBlacklist.clear();
                         faction.dimensionBlacklist.addAll(packet.dimensions);
                         
-
-                        
                         // Trigger MODIFY event and save all factions
                         io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
                         Faction.save();
+                        
+                        // Broadcast dimension changes to all online faction members
+                        broadcastDimensionsToFaction(faction);
                     } else {
                         player.sendMessage(
                             net.minecraft.text.Text.literal("§cError: Failed to parse NBT data!"), false);
                     }
                 } catch (Exception e) {
-                    System.err.println("[Factions] Error in handleCommitPacket async work:");
+
                     e.printStackTrace();
                     player.sendMessage(
                         net.minecraft.text.Text.literal("§cError saving dimension selections: " + e.getMessage()), false);
                 }
             });
         } catch (Exception e) {
-            System.err.println("[Factions] Error reading dimension commit packet:");
+
             e.printStackTrace();
             player.sendMessage(
                 net.minecraft.text.Text.literal("§cError reading packet: " + e.getMessage()), false);
@@ -206,7 +209,7 @@ public class DimensionNetworkHandler {
                 // Send user sync packet with faction info
                 syncUserDataToPlayer(player, user, faction);
             } catch (Exception e) {
-                System.err.println("[Factions] Error handling user sync request:");
+
                 e.printStackTrace();
             }
         });
@@ -230,7 +233,7 @@ public class DimensionNetworkHandler {
             
             ServerPlayNetworking.send(player, USER_SYNC_PACKET_ID, buf);
         } catch (Exception e) {
-            System.err.println("[Factions] Error sending user sync packet:");
+
             e.printStackTrace();
         }
     }
@@ -257,25 +260,16 @@ public class DimensionNetworkHandler {
     private static boolean areAllDimensionsInClaims(Faction faction, java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> dimensions) {
         java.util.List<io.icker.factions.api.persistents.Claim> claims = io.icker.factions.api.persistents.Claim.getByFaction(faction.getID());
         
-        System.out.println("[Factions] Validating " + dimensions.size() + " dimensions against " + claims.size() + " claims");
-        
         for (io.icker.factions.api.persistents.BlacklistedDimension dim : dimensions) {
             if (dim == null || dim.world == null || dim.world.isEmpty()) {
-                System.out.println("[Factions] Invalid dimension: null or empty world");
                 return false; // Invalid dimension
             }
             
-            System.out.println("[Factions] Checking dimension in world: " + dim.world + " from block (" + 
-                dim.minX + "," + dim.minY + "," + dim.minZ + ") to (" + dim.maxX + "," + dim.maxY + "," + dim.maxZ + ")");
-            
             // Check if this dimension region is entirely within claimed chunks
             if (!isDimensionInClaims(dim, claims)) {
-                System.out.println("[Factions] Dimension outside claims!");
                 return false;
             }
         }
-        
-        System.out.println("[Factions] All dimensions validated successfully");
         return true;
     }
 
@@ -291,8 +285,6 @@ public class DimensionNetworkHandler {
         int minChunkZ = Math.floorDiv(dim.minZ, 16);
         int maxChunkZ = Math.floorDiv(dim.maxZ, 16);
         
-        System.out.println("[Factions] Checking chunks from (" + minChunkX + "," + minChunkZ + ") to (" + maxChunkX + "," + maxChunkZ + ")");
-        
         // Check if all chunks in the region are claimed
         for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
             for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
@@ -306,17 +298,41 @@ public class DimensionNetworkHandler {
                 }
                 
                 if (!foundClaim) {
-                    System.out.println("[Factions] Chunk (" + chunkX + "," + chunkZ + ") not claimed in world " + dim.world);
-                    // Debug: print available claims
-                    for (io.icker.factions.api.persistents.Claim claim : claims) {
-                        System.out.println("[Factions]   Available claim: (" + claim.x + "," + claim.z + ") in " + claim.level);
-                    }
                     return false;
                 }
             }
         }
-        
-        System.out.println("[Factions] All chunks in region are claimed");
         return true;
+    }
+
+    /**
+     * Broadcast dimension updates to all online faction members
+     */
+    public static void broadcastDimensionsToFaction(Faction faction) {
+        if (faction == null) {
+            return;
+        }
+
+        // Use the server reference from WorldUtils
+        net.minecraft.server.MinecraftServer server = io.icker.factions.util.WorldUtils.server;
+        if (server == null) {
+            return;
+        }
+
+        try {
+            // Get all online players
+            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+                User user = User.get(player.getUuid());
+                Faction userFaction = user != null ? user.getFaction() : null;
+                if (userFaction != null && userFaction.getID().equals(faction.getID())) {
+                    // Only send to players who have the tool equipped and permission to view
+                    if (user.rank == User.Rank.OWNER || user.rank == User.Rank.COMMANDER || user.rank == User.Rank.LEADER) {
+                        syncDimensionsToPlayer(player, faction.dimensionBlacklist);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

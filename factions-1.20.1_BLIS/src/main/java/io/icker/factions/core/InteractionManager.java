@@ -79,16 +79,11 @@ public class InteractionManager {
             return;
         }
         
-        System.out.println("[Factions DEBUG] Claim removed at chunk " + chunkX + "," + chunkZ + " in level " + level);
-        System.out.println("[Factions DEBUG] Faction has " + faction.dimensionBlacklist.size() + " dimensions before cleanup");
-        
         // Calculate the block boundaries of the removed claim (chunk to block conversion)
         int claimMinX = chunkX * 16;
         int claimMaxX = (chunkX + 1) * 16;
         int claimMinZ = chunkZ * 16;
         int claimMaxZ = (chunkZ + 1) * 16;
-        
-        System.out.println("[Factions DEBUG] Claim boundaries: X=" + claimMinX + " to " + claimMaxX + ", Z=" + claimMinZ + " to " + claimMaxZ);
         
         // Remove any blacklisted dimensions that overlap with this claim's chunk
         int removed = 0;
@@ -105,17 +100,16 @@ public class InteractionManager {
             if (dim.minX < claimMaxX && dim.maxX > claimMinX && 
                 dim.minZ < claimMaxZ && dim.maxZ > claimMinZ) {
                 
-                System.out.println("[Factions DEBUG] Removing overlapping dimension: X=" + dim.minX + " to " + dim.maxX + ", Z=" + dim.minZ + " to " + dim.maxZ);
+
                 faction.dimensionBlacklist.remove(i);
                 removed++;
             }
         }
         
-        System.out.println("[Factions DEBUG] Removed " + removed + " dimensions, " + faction.dimensionBlacklist.size() + " remaining");
-        
         if (removed > 0) {
-            System.out.println("[Factions] Removed " + removed + " blacklisted dimensions for faction " + faction.getName() + " due to claim removal");
             Faction.save();
+            // Broadcast dimension changes to all online faction members
+            io.icker.factions.network.DimensionNetworkHandler.broadcastDimensionsToFaction(faction);
         }
     }
     
@@ -134,10 +128,10 @@ public class InteractionManager {
             return;
         }
         
-        int count = faction.dimensionBlacklist.size();
         faction.dimensionBlacklist.clear();
-        System.out.println("[Factions] Cleared " + count + " blacklisted dimensions for disbanded faction " + faction.getName());
         Faction.save();
+        // Broadcast dimension changes to all online faction members
+        io.icker.factions.network.DimensionNetworkHandler.broadcastDimensionsToFaction(faction);
     }
 
     private static boolean onBreakBlock(World world, PlayerEntity player, BlockPos pos,

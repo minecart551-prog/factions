@@ -337,12 +337,12 @@ public class SelectionManager {
                                 System.out.println("[Factions] Warning: Skipping dimension with null world: " + dim.name);
                             }
                         }
-                        System.out.println("[Factions] Loaded " + loaded + " dimensions from faction (total in faction: " + faction.dimensionBlacklist.size() + ")");
+
                     }
                 }
             }
         } catch (Exception e) {
-            System.err.println("[Factions] Error loading dimensions from faction:");
+
             e.printStackTrace();
         }
     }

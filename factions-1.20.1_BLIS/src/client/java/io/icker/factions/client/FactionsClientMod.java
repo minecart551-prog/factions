@@ -15,8 +15,6 @@ public class FactionsClientMod implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("FactionsClient");
 
     static {
-        System.out.println("================== FactionsClientMod CLASS LOADED ==================");
-        System.out.println("This class is definitely being loaded");
     }
 
     @Override

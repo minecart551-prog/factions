@@ -29,16 +29,13 @@ public class DimensionClientNetworkHandler {
             net.minecraft.nbt.NbtIo.write(packet.toNbt(), dos);
             
             byte[] nbtBytes = baos.toByteArray();
-            System.out.println("[Factions] Sending " + nbtBytes.length + " bytes of NBT data containing " + dimensions.size() + " dimensions");
             
             // Create buffer and write data
             io.netty.buffer.ByteBuf byteBuf = io.netty.buffer.Unpooled.copiedBuffer(nbtBytes);
             PacketByteBuf buf = new PacketByteBuf(byteBuf);
             
             ClientPlayNetworking.send(DimensionNetworkHandler.COMMIT_PACKET_ID, buf);
-            System.out.println("[Factions] Sent dimension commit packet successfully");
         } catch (Exception e) {
-            System.err.println("[Factions] Error sending dimension commit packet:");
             e.printStackTrace();
         }
     }
@@ -53,9 +50,7 @@ public class DimensionClientNetworkHandler {
             PacketByteBuf buf = new PacketByteBuf(byteBuf);
             
             ClientPlayNetworking.send(SYNC_REQUEST_PACKET_ID, buf);
-            System.out.println("[Factions] Sent dimension sync request to server");
         } catch (Exception e) {
-            System.err.println("[Factions] Error sending dimension sync request:");
             e.printStackTrace();
         }
     }
@@ -69,9 +64,7 @@ public class DimensionClientNetworkHandler {
             PacketByteBuf buf = new PacketByteBuf(byteBuf);
             
             ClientPlayNetworking.send(io.icker.factions.network.DimensionNetworkHandler.USER_SYNC_REQUEST_PACKET_ID, buf);
-            System.out.println("[Factions] Sent user sync request to server");
         } catch (Exception e) {
-            System.err.println("[Factions] Error sending user sync request:");
             e.printStackTrace();
         }
     }
