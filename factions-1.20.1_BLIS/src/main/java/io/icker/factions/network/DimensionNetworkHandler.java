@@ -159,14 +159,15 @@ public class DimensionNetworkHandler {
                         if (!areAllDimensionsInClaims(faction, packet.dimensions)) {
                             player.sendMessage(
                                 net.minecraft.text.Text.literal("§cAll selected regions must be within your faction's claimed chunks!"), false);
-                            // Send back the authoritative dimensions from the server so client discards the invalid ones
-                            syncDimensionsToPlayer(player, faction.dimensionBlacklist);
                             return;
                         }
                         
                         // Replace the entire list with what the client sent (to ensure deletions are reflected)
                         faction.dimensionBlacklist.clear();
                         faction.dimensionBlacklist.addAll(packet.dimensions);
+                        
+                        // Sync the ArrayList to the JSON field immediately
+                        faction.saveDimensionBlacklistToJson();
                         
                         // Trigger MODIFY event and save all factions
                         io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);

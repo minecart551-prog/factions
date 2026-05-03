@@ -96,9 +96,9 @@ public class InteractionManager {
             }
             
             // Check if dimension overlaps with the claim
-            // Overlap occurs if: minX < claimMaxX AND maxX > claimMinX AND minZ < claimMaxZ AND maxZ > claimMinZ
-            if (dim.minX < claimMaxX && dim.maxX > claimMinX && 
-                dim.minZ < claimMaxZ && dim.maxZ > claimMinZ) {
+            // Overlap occurs if: minX <= claimMaxX AND maxX >= claimMinX AND minZ <= claimMaxZ AND maxZ >= claimMinZ
+            if (dim.minX <= claimMaxX && dim.maxX >= claimMinX && 
+                dim.minZ <= claimMaxZ && dim.maxZ >= claimMinZ) {
                 
 
                 faction.dimensionBlacklist.remove(i);

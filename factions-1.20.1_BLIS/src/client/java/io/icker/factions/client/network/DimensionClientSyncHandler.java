@@ -39,8 +39,6 @@ public class DimensionClientSyncHandler {
                 for (io.icker.factions.api.persistents.BlacklistedDimension dim : packet.dimensions) {
                     if (dim != null && dim.world != null && !dim.world.isEmpty()) {
                         validDimensions.add(dim);
-                    } else {
-                        System.out.println("[Factions] Warning: Skipping invalid dimension during sync: world=" + (dim != null ? dim.world : "null"));
                     }
                 }
                 

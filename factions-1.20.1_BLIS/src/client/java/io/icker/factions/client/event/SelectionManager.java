@@ -187,17 +187,13 @@ public class SelectionManager {
         }
     }
     
-    /**
-     * Subtract a delete box from a region, returning resulting boxes
-     * A box subtraction can result in 0-6 boxes (if no overlap, returns empty list)
-     */
     private List<BlacklistedDimension> subtractBox(BlacklistedDimension region, 
                                                    int delMinX, int delMaxX, 
                                                    int delMinY, int delMaxY,
                                                    int delMinZ, int delMaxZ) {
         List<BlacklistedDimension> result = new ArrayList<>();
         
-        // Left box (x: region.minX to delMinX)
+        // Left box (x: region.minX to delMinX-1)
         if (region.minX < delMinX) {
             result.add(new BlacklistedDimension(
                 region.world,
@@ -217,7 +213,7 @@ public class SelectionManager {
             ));
         }
         
-        // Bottom box (y: region.minY to delMinY, x: delMinX to delMaxX)
+        // Bottom box (y: region.minY to delMinY-1, x: delMinX to delMaxX)
         if (region.minY < delMinY) {
             result.add(new BlacklistedDimension(
                 region.world,
@@ -237,7 +233,7 @@ public class SelectionManager {
             ));
         }
         
-        // Front box (z: region.minZ to delMinZ, x: delMinX to delMaxX, y: delMinY to delMaxY)
+        // Front box (z: region.minZ to delMinZ-1, x: delMinX to delMaxX, y: delMinY to delMaxY)
         if (region.minZ < delMinZ) {
             result.add(new BlacklistedDimension(
                 region.world,
@@ -333,8 +329,6 @@ public class SelectionManager {
                             if (dim != null && dim.world != null && !dim.world.isEmpty()) {
                                 this.pendingSelections.add(dim);
                                 loaded++;
-                            } else if (dim != null) {
-                                System.out.println("[Factions] Warning: Skipping dimension with null world: " + dim.name);
                             }
                         }
 

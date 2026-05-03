@@ -32,8 +32,8 @@ public class Faction {
                 faction.dimensionBlacklist = new ArrayList<>(faction.dimensionBlacklistOld);
                 faction.saveDimensionBlacklistToJson();
                 faction.dimensionBlacklistOld.clear(); // Clear old data so it doesn't get saved again
-            } else if (!faction.dimensionBlacklistJson.isEmpty() && !faction.dimensionBlacklistJson.equals("[]")) {
-                // Load from JSON if new format exists
+            } else if (!faction.dimensionBlacklistJson.isEmpty()) {
+                // Load from JSON if new format exists (including empty arrays)
                 faction.loadDimensionBlacklistFromJson();
             }
         }
@@ -153,7 +153,7 @@ public class Faction {
         Faction faction = STORE.get(id);
         if (faction != null) {
             // Load dimension blacklist from JSON if not already loaded
-            if (faction.dimensionBlacklist.isEmpty() && faction.dimensionBlacklistJson != null && !faction.dimensionBlacklistJson.isEmpty() && !faction.dimensionBlacklistJson.equals("[]")) {
+            if (faction.dimensionBlacklist.isEmpty() && faction.dimensionBlacklistJson != null && !faction.dimensionBlacklistJson.isEmpty()) {
                 faction.loadDimensionBlacklistFromJson();
             }
         }
@@ -817,7 +817,6 @@ public class Faction {
                 dimensionBlacklist = new ArrayList<>();
             }
         } catch (Exception e) {
-            System.err.println("[Factions] Error loading dimension blacklist from JSON:");
             e.printStackTrace();
             dimensionBlacklist = new ArrayList<>();
         }
@@ -831,7 +830,6 @@ public class Faction {
         try {
             dimensionBlacklistJson = GSON.toJson(dimensionBlacklist);
         } catch (Exception e) {
-            System.err.println("[Factions] Error saving dimension blacklist to JSON:");
             e.printStackTrace();
         }
     }
