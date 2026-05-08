@@ -271,21 +271,25 @@ public class InteractionManager {
         String blockId = Registries.BLOCK.getId(blockItem.getBlock()).toString();
         if (isBlockExempt(blockId)) return ActionResult.PASS;
         
+        // Calculate the actual position where the block will be placed
+        // context.getBlockPos() returns the clicked block position, not the placement position
+        BlockPos placePos = context.getBlockPos().offset(context.getSide());
+        
         // Check if position is in a blacklisted dimension
-        if (isDimensionBlacklisted(context.getPlayer(), context.getBlockPos(), context.getWorld())) {
+        if (isDimensionBlacklisted(context.getPlayer(), placePos, context.getWorld())) {
             InteractionsUtil.warn(context.getPlayer(), InteractionsUtilActions.PLACE_BLOCKS);
             InteractionsUtil.sync(context.getPlayer(), context.getStack(), context.getHand());
             return ActionResult.FAIL;
         }
         
         // Check if block is blacklisted by the claiming faction
-        if (isBlockBlacklisted(context.getPlayer(), context.getBlockPos(), context.getWorld(), blockId)) {
+        if (isBlockBlacklisted(context.getPlayer(), placePos, context.getWorld(), blockId)) {
             InteractionsUtil.warn(context.getPlayer(), InteractionsUtilActions.PLACE_BLOCKS);
             InteractionsUtil.sync(context.getPlayer(), context.getStack(), context.getHand());
             return ActionResult.FAIL;
         }
         
-        if (checkPermissions(context.getPlayer(), context.getBlockPos(), context.getWorld(),
+        if (checkPermissions(context.getPlayer(), placePos, context.getWorld(),
                 Permissions.PLACE_BLOCKS) == ActionResult.FAIL) {
             InteractionsUtil.warn(context.getPlayer(), InteractionsUtilActions.PLACE_BLOCKS);
             InteractionsUtil.sync(context.getPlayer(), context.getStack(), context.getHand());

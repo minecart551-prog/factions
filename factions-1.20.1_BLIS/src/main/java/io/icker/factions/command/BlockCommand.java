@@ -25,7 +25,7 @@ public class BlockCommand implements Command {
         if (player == null)
             return 0;
         
-        User user = User.get(player.getUuid());
+        User user = Command.getUser(player);
         Faction faction = user.getFaction();
         
         if (faction == null) {
@@ -73,7 +73,7 @@ public class BlockCommand implements Command {
         if (player == null)
             return 0;
         
-        User user = User.get(player.getUuid());
+        User user = Command.getUser(player);
         Faction faction = user.getFaction();
         
         if (faction == null) {
