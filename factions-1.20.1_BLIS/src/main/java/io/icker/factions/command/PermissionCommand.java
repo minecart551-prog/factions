@@ -28,7 +28,8 @@ public class PermissionCommand implements Command {
         if (player == null)
             return 0;
 
-        Faction sourceFaction = User.get(player.getUuid()).getFaction();
+        User user = Command.getUser(player);
+        Faction sourceFaction = user.getFaction();
         Faction targetFaction = Faction.getByName(StringArgumentType.getString(context, "faction"));
 
         if (sourceFaction == null || targetFaction == null) {
@@ -84,7 +85,8 @@ public class PermissionCommand implements Command {
         if (player == null)
             return 0;
 
-        Faction faction = User.get(player.getUuid()).getFaction();
+        User user = Command.getUser(player);
+        Faction faction = user.getFaction();
 
         if (faction == null) {
             new Message("You must be in a faction").fail().send(player, false);
@@ -133,7 +135,8 @@ public class PermissionCommand implements Command {
         if (player == null)
             return 0;
 
-        Faction sourceFaction = User.get(player.getUuid()).getFaction();
+        User user = Command.getUser(player);
+        Faction sourceFaction = user.getFaction();
         Faction targetFaction = Faction.getByName(StringArgumentType.getString(context, "faction"));
 
         if (sourceFaction == null || targetFaction == null) {
@@ -161,7 +164,8 @@ public class PermissionCommand implements Command {
         if (player == null)
             return 0;
 
-        Faction faction = User.get(player.getUuid()).getFaction();
+        User user = Command.getUser(player);
+        Faction faction = user.getFaction();
 
         if (faction == null) {
             new Message("You must be in a faction").fail().send(player, false);

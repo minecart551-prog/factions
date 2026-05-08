@@ -8,6 +8,7 @@ import java.io.DataOutputStream;
 import io.icker.factions.api.persistents.User;
 import io.icker.factions.api.persistents.Faction;
 import io.icker.factions.item.FactionsItems;
+import io.icker.factions.util.Command;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.player.PlayerEntity;
@@ -63,7 +64,7 @@ public class DimensionNetworkHandler {
     private static void handleSyncRequestPacket(net.minecraft.server.MinecraftServer server, ServerPlayerEntity player) {
         server.execute(() -> {
             try {
-                User user = User.get(player.getUuid());
+                User user = Command.getUser(player);
                 if (user == null) {
                     return;
                 }
@@ -134,7 +135,7 @@ public class DimensionNetworkHandler {
                         DimensionCommitPacket packet = DimensionCommitPacket.fromNbt(nbtCompound);
                         
                         // Get faction and save dimensions
-                        User user = User.get(player.getUuid());
+                        User user = Command.getUser(player);
                         if (user == null) {
                             player.sendMessage(
                                 net.minecraft.text.Text.literal("§cError: User not found!"), false);
@@ -200,7 +201,7 @@ public class DimensionNetworkHandler {
     private static void handleUserSyncRequestPacket(net.minecraft.server.MinecraftServer server, ServerPlayerEntity player) {
         server.execute(() -> {
             try {
-                User user = User.get(player.getUuid());
+                User user = Command.getUser(player);
                 if (user == null) {
                     return;
                 }
