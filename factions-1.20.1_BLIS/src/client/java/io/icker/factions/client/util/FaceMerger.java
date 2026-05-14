@@ -60,6 +60,15 @@ public class FaceMerger {
     }
     
     /**
+     * Extract boundary faces from voxel grid WITHOUT merging adjacent ones.
+     * Each face is exactly 1x1 in size, representing one block face on the outer surface.
+     */
+    public static List<Face> extractUnmergedBoundaryFaces(VoxelGrid grid) {
+        Set<Face> boundaryFaces = extractBoundaryFaces(grid);
+        return new ArrayList<>(boundaryFaces);
+    }
+
+    /**
      * Extract boundary faces from voxel grid and merge adjacent ones
      */
     public static List<Face> extractAndMergeBoundaryFaces(VoxelGrid grid) {

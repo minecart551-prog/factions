@@ -100,13 +100,13 @@ public class InteractionManager {
             if (dim.minX <= claimMaxX && dim.maxX >= claimMinX && 
                 dim.minZ <= claimMaxZ && dim.maxZ >= claimMinZ) {
                 
-
                 faction.dimensionBlacklist.remove(i);
                 removed++;
             }
         }
         
         if (removed > 0) {
+            faction.saveDimensionBlacklistToJson();
             Faction.save();
             // Broadcast dimension changes to all online faction members
             io.icker.factions.network.DimensionNetworkHandler.broadcastDimensionsToFaction(faction);

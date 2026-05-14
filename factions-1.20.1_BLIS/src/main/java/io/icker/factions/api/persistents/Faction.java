@@ -152,8 +152,11 @@ public class Faction {
     public static Faction get(UUID id) {
         Faction faction = STORE.get(id);
         if (faction != null) {
-            // Load dimension blacklist from JSON if not already loaded
-            if (faction.dimensionBlacklist.isEmpty() && faction.dimensionBlacklistJson != null && !faction.dimensionBlacklistJson.isEmpty()) {
+            // Load dimension blacklist from JSON if the value is "[]" (empty array) it means
+            // a previous save cycle already stored nothing, so skip reload.
+            if (faction.dimensionBlacklist.isEmpty() && faction.dimensionBlacklistJson != null 
+                    && !faction.dimensionBlacklistJson.isEmpty() 
+                    && !faction.dimensionBlacklistJson.equals("[]")) {
                 faction.loadDimensionBlacklistFromJson();
             }
         }
