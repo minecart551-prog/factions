@@ -826,11 +826,34 @@ public class Faction {
     }
     
     /**
-     * Save dimensionBlacklist to JSON before database persistence
-     * Called automatically during save
+     * Save dimensionBlacklist to JSON before database persistence.
+     * Called automatically during save.
+     * IMPORTANT: To prevent accidental data loss, if the list is empty but we
+     * previously had valid data in the JSON field, we keep the old JSON data.
+     * This ensures that if something clears dimensionBlacklist by mistake
+     * (e.g. onClaimRemove with overlap, or any other unintended clear),
+     * the valid data is preserved on disk and can be restored on next restart.
+     * The only way to truly clear is via the explicit /f dimension clear command
+     * which passes forceClear=true.
      */
     public void saveDimensionBlacklistToJson() {
+        saveDimensionBlacklistToJson(false);
+    }
+    
+    /**
+     * Save dimensionBlacklist to JSON before database persistence.
+     * @param forceClear If true, writes "[]" even if list is empty (used by /f dimension clear)
+     */
+    public void saveDimensionBlacklistToJson(boolean forceClear) {
         try {
+            if (!forceClear && dimensionBlacklist.isEmpty() 
+                    && dimensionBlacklistJson != null 
+                    && !dimensionBlacklistJson.isEmpty() 
+                    && !dimensionBlacklistJson.equals("[]")) {
+                // Protect existing valid data from being overwritten by an empty list
+                // This prevents accidental data loss from any code that clears dimensionBlacklist
+                return;
+            }
             dimensionBlacklistJson = GSON.toJson(dimensionBlacklist);
         } catch (Exception e) {
             e.printStackTrace();

@@ -55,6 +55,9 @@ public class DimensionCommand implements Command {
         
 
         
+        // Ensure dimension blacklist is loaded from JSON before displaying
+        faction.loadDimensionBlacklistFromJson();
+        
         if (faction.dimensionBlacklist.isEmpty()) {
             new Message("No dimensions are blacklisted").send(player, false);
             return 1;
@@ -92,7 +95,8 @@ public class DimensionCommand implements Command {
         
         int count = faction.dimensionBlacklist.size();
         faction.dimensionBlacklist.clear();
-        faction.saveDimensionBlacklistToJson();
+        // Force clear - must pass true to override the accidental data loss protection
+        faction.saveDimensionBlacklistToJson(true);
         // Trigger MODIFY event and save all factions
         io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
         Faction.save();
