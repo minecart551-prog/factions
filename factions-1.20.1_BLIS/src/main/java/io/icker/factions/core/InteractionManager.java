@@ -65,7 +65,9 @@ public class InteractionManager {
     }
     
     /**
-     * When a claim is removed, clean up any blacklisted dimensions that overlap with it
+     * When a claim is removed, subtract it from any overlapping blacklisted dimensions
+     * instead of deleting the entire region. This preserves the rest of the shape.
+     * Uses the same box subtraction logic as the client-side delete tool.
      */
     private static void onClaimRemove(int chunkX, int chunkZ, String level, Faction faction) {
         if (faction == null) {
@@ -81,36 +83,96 @@ public class InteractionManager {
         
         // Calculate the block boundaries of the removed claim (chunk to block conversion)
         int claimMinX = chunkX * 16;
-        int claimMaxX = (chunkX + 1) * 16;
+        int claimMaxX = (chunkX + 1) * 16 - 1; // Inclusive
         int claimMinZ = chunkZ * 16;
-        int claimMaxZ = (chunkZ + 1) * 16;
+        int claimMaxZ = (chunkZ + 1) * 16 - 1; // Inclusive
+        int claimHeight = 320; // Full world height for removal
         
-        // Remove any blacklisted dimensions that overlap with this claim's chunk
-        int removed = 0;
-        for (int i = faction.dimensionBlacklist.size() - 1; i >= 0; i--) {
-            BlacklistedDimension dim = faction.dimensionBlacklist.get(i);
-            
+        boolean changed = false;
+        java.util.List<BlacklistedDimension> updatedList = new java.util.ArrayList<>();
+        
+        for (BlacklistedDimension dim : faction.dimensionBlacklist) {
             // Check if dimension is in the same world/level
             if (!dim.world.equals(level)) {
+                updatedList.add(dim);
                 continue;
             }
             
             // Check if dimension overlaps with the claim
-            // Overlap occurs if: minX <= claimMaxX AND maxX >= claimMinX AND minZ <= claimMaxZ AND maxZ >= claimMinZ
             if (dim.minX <= claimMaxX && dim.maxX >= claimMinX && 
                 dim.minZ <= claimMaxZ && dim.maxZ >= claimMinZ) {
                 
-                faction.dimensionBlacklist.remove(i);
-                removed++;
+                // Subtract the claim chunk from this dimension
+                java.util.List<BlacklistedDimension> subtracted = subtractBlacklistedClaim(dim, 
+                    claimMinX, claimMaxX, claimMinZ, claimMaxZ);
+                updatedList.addAll(subtracted);
+                changed = true;
+            } else {
+                // No overlap - keep the dimension as-is
+                updatedList.add(dim);
             }
         }
         
-        if (removed > 0) {
+        if (changed) {
+            faction.dimensionBlacklist.clear();
+            faction.dimensionBlacklist.addAll(updatedList);
             faction.saveDimensionBlacklistToJson();
             Faction.save();
             // Broadcast dimension changes to all online faction members
             io.icker.factions.network.DimensionNetworkHandler.broadcastDimensionsToFaction(faction);
         }
+    }
+    
+    /**
+     * Subtract a claim chunk from a blacklisted dimension, splitting it into
+     * up to 4 sub-regions (left, right, front, back).
+     * Y-axis is unaffected since claims cover full height.
+     */
+    private static java.util.List<BlacklistedDimension> subtractBlacklistedClaim(
+            BlacklistedDimension dim, int claimMinX, int claimMaxX, int claimMinZ, int claimMaxZ) {
+        java.util.List<BlacklistedDimension> result = new java.util.ArrayList<>();
+        
+        // Left box (x: dim.minX to claimMinX-1)
+        if (dim.minX < claimMinX) {
+            result.add(new BlacklistedDimension(
+                dim.world,
+                dim.minX, dim.minY, dim.minZ,
+                claimMinX - 1, dim.maxY, dim.maxZ,
+                dim.name
+            ));
+        }
+        
+        // Right box (x: claimMaxX+1 to dim.maxX)
+        if (dim.maxX > claimMaxX) {
+            result.add(new BlacklistedDimension(
+                dim.world,
+                claimMaxX + 1, dim.minY, dim.minZ,
+                dim.maxX, dim.maxY, dim.maxZ,
+                dim.name
+            ));
+        }
+        
+        // Front box (z: dim.minZ to claimMinZ-1, x: clamped to claim chunk x-range)
+        if (dim.minZ < claimMinZ) {
+            result.add(new BlacklistedDimension(
+                dim.world,
+                Math.max(dim.minX, claimMinX), dim.minY, dim.minZ,
+                Math.min(dim.maxX, claimMaxX), dim.maxY, claimMinZ - 1,
+                dim.name
+            ));
+        }
+        
+        // Back box (z: claimMaxZ+1 to dim.maxZ, x: clamped to claim chunk x-range)
+        if (dim.maxZ > claimMaxZ) {
+            result.add(new BlacklistedDimension(
+                dim.world,
+                Math.max(dim.minX, claimMinX), dim.minY, claimMaxZ + 1,
+                Math.min(dim.maxX, claimMaxX), dim.maxY, dim.maxZ,
+                dim.name
+            ));
+        }
+        
+        return result;
     }
     
     /**

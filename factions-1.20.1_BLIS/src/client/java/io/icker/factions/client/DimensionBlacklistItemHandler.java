@@ -158,6 +158,9 @@ public class DimensionBlacklistItemHandler {
             selectionMgr.setSecondPos(pos);
             selectionStep = 2;
         }
+        
+        // Mark renderer for rebuild to show the updated selection highlight
+        DimensionBlacklistRenderer.getInstance().markNeedsRebuild();
     }
     
     /**
@@ -180,6 +183,9 @@ public class DimensionBlacklistItemHandler {
         
         // Enter delete mode - first right-click sets first corner, second right-click sets second and deletes
         selectionMgr.enterDeleteMode(pos, worldKey);
+        
+        // Mark renderer for rebuild to show the delete mode highlight
+        DimensionBlacklistRenderer.getInstance().markNeedsRebuild();
     }
 
     /**
@@ -197,7 +203,10 @@ public class DimensionBlacklistItemHandler {
 
         var matrices = context.matrixStack();
         
-        DimensionBlacklistRenderer.getInstance().render(camX, camY, camZ, matrices);
+        // Pass frustum for distance-based culling (like Bounding does)
+        DimensionBlacklistRenderer renderer = DimensionBlacklistRenderer.getInstance();
+        renderer.setFrustum(context.frustum());
+        renderer.render(camX, camY, camZ, matrices);
     }
 
     /**

@@ -46,7 +46,8 @@ public class DimensionClientSyncHandler {
                 SelectionManager selectionMgr = SelectionManager.getInstance();
                 selectionMgr.setPendingSelections(validDimensions);
                 
-
+                // Mark renderer for rebuild with new data
+                io.icker.factions.client.render.DimensionBlacklistRenderer.getInstance().markNeedsRebuild();
             }
         } catch (Exception e) {
 
