@@ -2,23 +2,31 @@ package io.icker.factions.network;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import io.icker.factions.api.persistents.BlacklistedDimension;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtList;
 
 /**
- * Packet data for committing dimension selections from client to server
+ * Packet data for committing dimension selections from client to server.
+ * Supports chunking: large payloads are split into chunks with session IDs.
  */
 public class DimensionCommitPacket {
     public List<BlacklistedDimension> dimensions;
+    public UUID sessionId;
+    public int totalChunks;
+    public int chunkIndex;
+    public boolean isChunk;
 
     public DimensionCommitPacket(List<BlacklistedDimension> dimensions) {
         this.dimensions = new ArrayList<>(dimensions);
+        this.isChunk = false;
     }
 
     public DimensionCommitPacket() {
         this.dimensions = new ArrayList<>();
+        this.isChunk = false;
     }
 
     /**
@@ -47,6 +55,14 @@ public class DimensionCommitPacket {
         }
 
         tag.put("dimensions", dimensionsList);
+        
+        // Chunking metadata
+        if (isChunk) {
+            if (sessionId != null) tag.putUuid("sessionId", sessionId);
+            tag.putInt("totalChunks", totalChunks);
+            tag.putInt("chunkIndex", chunkIndex);
+        }
+        
         return tag;
     }
 
@@ -72,6 +88,22 @@ public class DimensionCommitPacket {
             packet.dimensions.add(dim);
         }
 
+        // Check if this is a chunk
+        if (tag.contains("sessionId")) {
+            packet.isChunk = true;
+            packet.sessionId = tag.getUuid("sessionId");
+            packet.totalChunks = tag.getInt("totalChunks");
+            packet.chunkIndex = tag.getInt("chunkIndex");
+        }
+
         return packet;
+    }
+    
+    /**
+     * Estimate the byte size of serialized dimensions for a given count
+     */
+    public static long estimateSize(int dimensionCount) {
+        // Approximate: each dimension has ~7 ints (28 bytes) + 2 strings (~40 bytes) + NBT overhead (~30 bytes)
+        return (long)dimensionCount * 100L + 64L;
     }
 }

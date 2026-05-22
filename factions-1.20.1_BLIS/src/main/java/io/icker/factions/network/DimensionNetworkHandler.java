@@ -7,6 +7,7 @@ import java.io.DataOutputStream;
 
 import io.icker.factions.api.persistents.User;
 import io.icker.factions.api.persistents.Faction;
+import io.icker.factions.api.persistents.BlacklistedDimension;
 import io.icker.factions.item.FactionsItems;
 import io.icker.factions.util.Command;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
@@ -25,17 +26,36 @@ import net.minecraft.world.World;
  */
 public class DimensionNetworkHandler {
     public static final Identifier COMMIT_PACKET_ID = new Identifier("factions", "dimension_commit");
+    public static final Identifier COMMIT_CHUNK_PACKET_ID = new Identifier("factions", "dimension_commit_chunk");
     public static final Identifier SYNC_PACKET_ID = new Identifier("factions", "dimension_sync");
     public static final Identifier SYNC_REQUEST_PACKET_ID = new Identifier("factions", "dimension_sync_request");
     public static final Identifier USER_SYNC_REQUEST_PACKET_ID = new Identifier("factions", "user_sync_request");
     public static final Identifier USER_SYNC_PACKET_ID = new Identifier("factions", "user_sync");
 
+    // Accumulates commit chunks per player: sessionId -> {totalExpected, dimensions}
+    private static final java.util.Map<java.util.UUID, ChunkedCommit> pendingCommitChunks =
+        new java.util.HashMap<>();
+    
+    private static class ChunkedCommit {
+        int totalExpected;
+        java.util.List<BlacklistedDimension> dimensions = new java.util.ArrayList<>();
+        ChunkedCommit(int totalExpected) { this.totalExpected = totalExpected; }
+    }
+
     public static void registerHandlers() {
-        // Register the server-side packet receiver for client→server commits
+        // Register the server-side packet receiver for client→server commits (single packet)
         ServerPlayNetworking.registerGlobalReceiver(COMMIT_PACKET_ID, 
             (server, player, handler, buf, responseSender) -> {
                 handleCommitPacket(server, player, buf);
             });
+        
+        // Register the server-side packet receiver for client→server commit chunks (multi-packet)
+        ServerPlayNetworking.registerGlobalReceiver(COMMIT_CHUNK_PACKET_ID,
+            (server, player, handler, buf, responseSender) -> {
+                handleCommitChunkPacket(server, player, buf);
+            });
+        
+        pendingCommitChunks.clear(); // Reset on server start
         
         // Register the server-side packet receiver for client→server sync requests
         ServerPlayNetworking.registerGlobalReceiver(SYNC_REQUEST_PACKET_ID,
@@ -192,6 +212,74 @@ public class DimensionNetworkHandler {
             e.printStackTrace();
             player.sendMessage(
                 net.minecraft.text.Text.literal("§cError reading packet: " + e.getMessage()), false);
+        }
+    }
+
+    /**
+     * Handle incoming commit chunk packet from client (for multi-packet commits).
+     * Accumulates chunks until all are received, then processes the full list.
+     */
+    private static void handleCommitChunkPacket(net.minecraft.server.MinecraftServer server, ServerPlayerEntity player, 
+                                                PacketByteBuf buf) {
+        try {
+            byte[] nbtBytes = new byte[buf.readableBytes()];
+            buf.readBytes(nbtBytes);
+
+            server.execute(() -> {
+                try {
+                    DataInputStream dis = new DataInputStream(new ByteArrayInputStream(nbtBytes));
+                    net.minecraft.nbt.NbtCompound nbtCompound = NbtIo.read(dis);
+                    
+                    if (nbtCompound != null) {
+                        DimensionCommitPacket chunk = DimensionCommitPacket.fromNbt(nbtCompound);
+                        
+                        if (!chunk.isChunk || chunk.sessionId == null) {
+                            player.sendMessage(
+                                net.minecraft.text.Text.literal("§cInvalid chunk packet"), false);
+                            return;
+                        }
+                        
+                        // Accumulate this chunk using ChunkedCommit wrapper
+                        ChunkedCommit cc = pendingCommitChunks.get(chunk.sessionId);
+                        if (cc == null) {
+                            cc = new ChunkedCommit(chunk.totalChunks);
+                            pendingCommitChunks.put(chunk.sessionId, cc);
+                        }
+                        cc.dimensions.addAll(chunk.dimensions);
+                        
+                        // Check if we've received all chunks
+                        if (cc.dimensions.size() >= cc.totalExpected * 5) {
+                            pendingCommitChunks.remove(chunk.sessionId);
+                            
+                            // Now process the full accumulated list as a regular commit
+                            User user = Command.getUser(player);
+                            if (user == null) return;
+                            Faction faction = user.getFaction();
+                            if (faction == null) return;
+                            if (user.rank != User.Rank.OWNER && user.rank != User.Rank.COMMANDER && user.rank != User.Rank.LEADER) {
+                                player.sendMessage(
+                                    net.minecraft.text.Text.literal("§cOnly faction leadership can edit dimension blacklist!"), false);
+                                return;
+                            }
+                            if (!areAllDimensionsInClaims(faction, cc.dimensions)) {
+                                player.sendMessage(
+                                    net.minecraft.text.Text.literal("§cAll selected regions must be within your faction's claimed chunks!"), false);
+                                return;
+                            }
+                            faction.dimensionBlacklist.clear();
+                            faction.dimensionBlacklist.addAll(cc.dimensions);
+                            faction.saveDimensionBlacklistToJson();
+                            io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
+                            Faction.save();
+                            broadcastDimensionsToFaction(faction);
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
