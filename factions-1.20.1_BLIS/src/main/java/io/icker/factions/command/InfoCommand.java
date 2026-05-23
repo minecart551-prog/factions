@@ -59,7 +59,26 @@ public class InfoCommand implements Command {
                         .orElse(new GameProfile(Util.NIL_UUID, "{Uncached Player}")).getName())
                 .collect(Collectors.joining(", "));
 
+        String leaderList = users.stream().filter(u -> u.rank == User.Rank.LEADER)
+                .map(user -> {
+                    String name = cache.getByUuid(user.getID())
+                            .orElse(new GameProfile(Util.NIL_UUID, "{Uncached Player}")).getName();
+                    int power = (int) (user.getPower() * user.getActivityMultiplier());
+                    return name + Formatting.GRAY + " (" + power + ")" + Formatting.WHITE;
+                })
+                .collect(Collectors.joining(", "));
+
+        String commanderList = users.stream().filter(u -> u.rank == User.Rank.COMMANDER)
+                .map(user -> {
+                    String name = cache.getByUuid(user.getID())
+                            .orElse(new GameProfile(Util.NIL_UUID, "{Uncached Player}")).getName();
+                    int power = (int) (user.getPower() * user.getActivityMultiplier());
+                    return name + Formatting.GRAY + " (" + power + ")" + Formatting.WHITE;
+                })
+                .collect(Collectors.joining(", "));
+
         String usersList = users.stream()
+                .filter(u -> u.rank == User.Rank.MEMBER)
                 .map(user -> {
                     String name = cache.getByUuid(user.getID())
                             .orElse(new GameProfile(Util.NIL_UUID, "{Uncached Player}")).getName();
@@ -103,8 +122,23 @@ public class InfoCommand implements Command {
         // Show faction owner
         new Message(Formatting.GOLD + "Owner: ").add(Formatting.WHITE + owner).send(player, false);
 
+        // Show leaders
+        if (!leaderList.isEmpty()) {
+            new Message(Formatting.GOLD + "Leaders (" + Formatting.WHITE
+                    + users.stream().filter(u -> u.rank == User.Rank.LEADER).count()
+                    + Formatting.GOLD + "): ").add(leaderList).send(player, false);
+        }
+
+        // Show commanders
+        if (!commanderList.isEmpty()) {
+            new Message(Formatting.GOLD + "Commanders (" + Formatting.WHITE
+                    + users.stream().filter(u -> u.rank == User.Rank.COMMANDER).count()
+                    + Formatting.GOLD + "): ").add(commanderList).send(player, false);
+        }
+
         // Show member list
-        new Message(Formatting.GOLD + "Members (" + Formatting.WHITE.toString() + users.size()
+        int memberCount = (int) users.stream().filter(u -> u.rank == User.Rank.MEMBER).count();
+        new Message(Formatting.GOLD + "Members (" + Formatting.WHITE.toString() + memberCount
                 + Formatting.GOLD.toString() + "): ").add(usersList).send(player, false);
 
         // Build total power breakdown hover text with colors

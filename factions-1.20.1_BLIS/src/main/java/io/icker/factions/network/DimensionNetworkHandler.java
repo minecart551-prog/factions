@@ -13,6 +13,7 @@ import io.icker.factions.util.Command;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.Item;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -32,14 +33,18 @@ public class DimensionNetworkHandler {
     public static final Identifier USER_SYNC_REQUEST_PACKET_ID = new Identifier("factions", "user_sync_request");
     public static final Identifier USER_SYNC_PACKET_ID = new Identifier("factions", "user_sync");
 
-    // Accumulates commit chunks per player: sessionId -> {totalExpected, dimensions}
+    // Accumulates commit chunks per player: sessionId -> {totalChunks, dimensions, receivedChunkIndices}
     private static final java.util.Map<java.util.UUID, ChunkedCommit> pendingCommitChunks =
         new java.util.HashMap<>();
     
     private static class ChunkedCommit {
-        int totalExpected;
+        int totalChunks;
         java.util.List<BlacklistedDimension> dimensions = new java.util.ArrayList<>();
-        ChunkedCommit(int totalExpected) { this.totalExpected = totalExpected; }
+        java.util.BitSet receivedChunks;
+        ChunkedCommit(int totalChunks) { 
+            this.totalChunks = totalChunks; 
+            this.receivedChunks = new java.util.BitSet(totalChunks);
+        }
     }
 
     public static void registerHandlers() {
@@ -69,9 +74,10 @@ public class DimensionNetworkHandler {
                 handleUserSyncRequestPacket(server, player);
             });
         
-        // Prevent block breaking when holding the dimension blacklist tool
+        // Prevent block breaking when holding dimension tools
         AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
-            if (player.getStackInHand(hand).getItem() == FactionsItems.DIMENSION_BLACKLIST_TOOL) {
+            Item item = player.getStackInHand(hand).getItem();
+            if (item == FactionsItems.DIMENSION_BLACKLIST_TOOL || item == FactionsItems.DIMENSION_WHITELIST_TOOL) {
                 return ActionResult.FAIL; // Prevent the attack
             }
             return ActionResult.PASS; // Allow other attacks
@@ -79,7 +85,8 @@ public class DimensionNetworkHandler {
     }
     
     /**
-     * Handle sync request from client - send current dimensions back
+     * Handle sync request from client - send current dimensions back.
+     * Detects which tool the player is holding and sends the correct list.
      */
     private static void handleSyncRequestPacket(net.minecraft.server.MinecraftServer server, ServerPlayerEntity player) {
         server.execute(() -> {
@@ -100,8 +107,10 @@ public class DimensionNetworkHandler {
                     return;  // Silently reject - non-leadership can't access dimensions
                 }
                 
-                // Send the current dimensions from the server to the client
-                syncDimensionsToPlayer(player, faction.dimensionBlacklist);
+                // Always send BOTH lists to the client so SelectionManager has complete data
+                // regardless of which tool is held (fixes stale data when spoofing or switching tools)
+                syncDimensionsToPlayer(player, faction.dimensionBlacklist, false);
+                syncDimensionsToPlayer(player, faction.dimensionWhitelist, true);
             } catch (Exception e) {
     
                 e.printStackTrace();
@@ -113,8 +122,16 @@ public class DimensionNetworkHandler {
      * Send dimensions sync packet from server to client for a specific player
      */
     public static void syncDimensionsToPlayer(ServerPlayerEntity player, java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> dimensions) {
+        syncDimensionsToPlayer(player, dimensions, false);
+    }
+
+    /**
+     * Send dimensions sync packet from server to client with whitelist flag
+     */
+    public static void syncDimensionsToPlayer(ServerPlayerEntity player, java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> dimensions, boolean isWhitelist) {
         try {
             DimensionSyncPacket packet = new DimensionSyncPacket(dimensions);
+            packet.isWhitelist = isWhitelist;
             net.minecraft.nbt.NbtCompound nbt = packet.toNbt();
             
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -131,7 +148,7 @@ public class DimensionNetworkHandler {
             e.printStackTrace();
         }
     }
-
+    
     /**
      * Handle incoming commit packet from client
      */
@@ -183,12 +200,36 @@ public class DimensionNetworkHandler {
                             return;
                         }
                         
-                        // Replace the entire list with what the client sent (to ensure deletions are reflected)
-                        faction.dimensionBlacklist.clear();
-                        faction.dimensionBlacklist.addAll(packet.dimensions);
+                        // Ensure both lists are loaded from JSON before any operation
+                        faction.loadDimensionBlacklistFromJson();
+                        faction.loadDimensionWhitelistFromJson();
                         
-                        // Sync the ArrayList to the JSON field immediately
-                        faction.saveDimensionBlacklistToJson();
+                        // Check for overlap with opposite type
+                        if (packet.isWhitelist) {
+                            for (BlacklistedDimension wlDim : packet.dimensions) {
+                                for (BlacklistedDimension blDim : faction.dimensionBlacklist) {
+                                    if (wlDim.overlaps(blDim)) {
+                                        player.sendMessage(net.minecraft.text.Text.literal("§cWhitelist region cannot overlap blacklist region!"), false);
+                                        return;
+                                    }
+                                }
+                            }
+                            faction.dimensionWhitelist.clear();
+                            faction.dimensionWhitelist.addAll(packet.dimensions);
+                            faction.saveDimensionWhitelistToJson();
+                        } else {
+                            for (BlacklistedDimension blDim : packet.dimensions) {
+                                for (BlacklistedDimension wlDim : faction.dimensionWhitelist) {
+                                    if (blDim.overlaps(wlDim)) {
+                                        player.sendMessage(net.minecraft.text.Text.literal("§cBlacklist region cannot overlap whitelist region!"), false);
+                                        return;
+                                    }
+                                }
+                            }
+                            faction.dimensionBlacklist.clear();
+                            faction.dimensionBlacklist.addAll(packet.dimensions);
+                            faction.saveDimensionBlacklistToJson();
+                        }
                         
                         // Trigger MODIFY event and save all factions
                         io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
@@ -196,6 +237,10 @@ public class DimensionNetworkHandler {
                         
                         // Broadcast dimension changes to all online faction members
                         broadcastDimensionsToFaction(faction);
+                        
+                        // Also send direct sync to the committing player (handles spoofing case)
+                        syncDimensionsToPlayer(player, faction.dimensionBlacklist, false);
+                        syncDimensionsToPlayer(player, faction.dimensionWhitelist, true);
                     } else {
                         player.sendMessage(
                             net.minecraft.text.Text.literal("§cError: Failed to parse NBT data!"), false);
@@ -246,9 +291,10 @@ public class DimensionNetworkHandler {
                             pendingCommitChunks.put(chunk.sessionId, cc);
                         }
                         cc.dimensions.addAll(chunk.dimensions);
+                        cc.receivedChunks.set(chunk.chunkIndex);
                         
                         // Check if we've received all chunks
-                        if (cc.dimensions.size() >= cc.totalExpected * 5) {
+                        if (cc.receivedChunks.cardinality() == cc.totalChunks) {
                             pendingCommitChunks.remove(chunk.sessionId);
                             
                             // Now process the full accumulated list as a regular commit
@@ -266,12 +312,44 @@ public class DimensionNetworkHandler {
                                     net.minecraft.text.Text.literal("§cAll selected regions must be within your faction's claimed chunks!"), false);
                                 return;
                             }
-                            faction.dimensionBlacklist.clear();
-                            faction.dimensionBlacklist.addAll(cc.dimensions);
-                            faction.saveDimensionBlacklistToJson();
+                            
+                            // Ensure both lists are loaded from JSON before any operation
+                            faction.loadDimensionBlacklistFromJson();
+                            faction.loadDimensionWhitelistFromJson();
+                            
+                            // Check for overlap with opposite type
+                            if (chunk.isWhitelist) {
+                                for (BlacklistedDimension wlDim : cc.dimensions) {
+                                    for (BlacklistedDimension blDim : faction.dimensionBlacklist) {
+                                        if (wlDim.overlaps(blDim)) {
+                                            player.sendMessage(net.minecraft.text.Text.literal("§cWhitelist region cannot overlap blacklist region!"), false);
+                                            return;
+                                        }
+                                    }
+                                }
+                                faction.dimensionWhitelist.clear();
+                                faction.dimensionWhitelist.addAll(cc.dimensions);
+                                faction.saveDimensionWhitelistToJson();
+                            } else {
+                                for (BlacklistedDimension blDim : cc.dimensions) {
+                                    for (BlacklistedDimension wlDim : faction.dimensionWhitelist) {
+                                        if (blDim.overlaps(wlDim)) {
+                                            player.sendMessage(net.minecraft.text.Text.literal("§cBlacklist region cannot overlap whitelist region!"), false);
+                                            return;
+                                        }
+                                    }
+                                }
+                                faction.dimensionBlacklist.clear();
+                                faction.dimensionBlacklist.addAll(cc.dimensions);
+                                faction.saveDimensionBlacklistToJson();
+                            }
                             io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
                             Faction.save();
                             broadcastDimensionsToFaction(faction);
+                            
+                            // Also send direct sync to the committing player (handles spoofing case)
+                            syncDimensionsToPlayer(player, faction.dimensionBlacklist, false);
+                            syncDimensionsToPlayer(player, faction.dimensionWhitelist, true);
                         }
                     }
                 } catch (Exception e) {
@@ -399,25 +477,20 @@ public class DimensionNetworkHandler {
      * Broadcast dimension updates to all online faction members
      */
     public static void broadcastDimensionsToFaction(Faction faction) {
-        if (faction == null) {
-            return;
-        }
+        if (faction == null) return;
 
-        // Use the server reference from WorldUtils
         net.minecraft.server.MinecraftServer server = io.icker.factions.util.WorldUtils.server;
-        if (server == null) {
-            return;
-        }
+        if (server == null) return;
 
         try {
-            // Get all online players
             for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
                 User user = User.get(player.getUuid());
                 Faction userFaction = user != null ? user.getFaction() : null;
                 if (userFaction != null && userFaction.getID().equals(faction.getID())) {
-                    // Only send to players who have the tool equipped and permission to view
                     if (user.rank == User.Rank.OWNER || user.rank == User.Rank.COMMANDER || user.rank == User.Rank.LEADER) {
-                        syncDimensionsToPlayer(player, faction.dimensionBlacklist);
+                        // Always send both blacklist and whitelist
+                        syncDimensionsToPlayer(player, faction.dimensionBlacklist, false);
+                        syncDimensionsToPlayer(player, faction.dimensionWhitelist, true);
                     }
                 }
             }

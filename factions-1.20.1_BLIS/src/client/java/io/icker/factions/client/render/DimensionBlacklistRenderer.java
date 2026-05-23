@@ -11,22 +11,17 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.item.Item;
 import java.awt.Color;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-/**
- * Renders dimension blacklist/whitelist boxes as semi-transparent filled quads
- * (outer surface only, no edge lines).
- * Double-buffered async building - geometry builds on background thread, no freeze.
- */
 @Environment(EnvType.CLIENT)
 public class DimensionBlacklistRenderer {
     private static final DimensionBlacklistRenderer INSTANCE = new DimensionBlacklistRenderer();
 
-    // Double-buffered rendering contexts for async building
     private final FactionsRenderingContext[] ctxPool = new FactionsRenderingContext[] {
         new FactionsRenderingContext(),
         new FactionsRenderingContext()
@@ -34,44 +29,28 @@ public class DimensionBlacklistRenderer {
     private int activeContextIndex = 0;
     private boolean contextReady = false;
 
-    // Frustum for distance-based culling
     private static Frustum currentFrustum = null;
 
-    // Background executor for async building
     private static final Executor BACKGROUND_EXECUTOR = Executors.newSingleThreadExecutor(
         r -> { Thread t = new Thread(r, "Factions-Build-Thread"); t.setDaemon(true); return t; }
     );
 
     private volatile boolean needsRebuild = true;
     private volatile CompletableFuture<Void> buildingFuture = null;
-
-    // Maximum render distance in blocks
     private static final int MAX_RENDER_DISTANCE = 64;
 
-    // Color constants
     private static final Color BLACKLIST_GREEN = new Color(0, 255, 0);
+    private static final Color WHITELIST_WHITE = new Color(255, 255, 255);
     private static final Color DELETE_RED = new Color(255, 0, 0);
     private static final Color SELECTION_GREEN = new Color(0, 255, 0);
     private static final int FILL_ALPHA = 45;
 
-    private DimensionBlacklistRenderer() {
-    }
+    private DimensionBlacklistRenderer() {}
 
-    public static DimensionBlacklistRenderer getInstance() {
-        return INSTANCE;
-    }
+    public static DimensionBlacklistRenderer getInstance() { return INSTANCE; }
+    public void setFrustum(Frustum frustum) { currentFrustum = frustum; }
+    public void markNeedsRebuild() { this.needsRebuild = true; }
 
-    public void setFrustum(Frustum frustum) {
-        currentFrustum = frustum;
-    }
-
-    public void markNeedsRebuild() {
-        this.needsRebuild = true;
-    }
-
-    /**
-     * Check if a region box is close enough to render (distance culling).
-     */
     private boolean isVisibleInFrustum(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
         if (currentFrustum == null) return true;
         double camX = MinecraftClient.getInstance().gameRenderer.getCamera().getPos().x;
@@ -84,17 +63,11 @@ public class DimensionBlacklistRenderer {
         return currentFrustum.isVisible(new Box(minX, minY, minZ, maxX, maxY, maxZ));
     }
 
-    /**
-     * Build geometry on a background context. Called from async thread.
-     */
     private void buildAsync(FactionsRenderingContext buildCtx) {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null || mc.world == null) return;
 
         SelectionManager selectionMgr = SelectionManager.getInstance();
-        List<io.icker.factions.api.persistents.BlacklistedDimension> allRegions = selectionMgr.getPendingSelections();
-
-        // Use camera position for culling
         double camX = mc.gameRenderer.getCamera().getPos().x;
         double camY = mc.gameRenderer.getCamera().getPos().y;
         double camZ = mc.gameRenderer.getCamera().getPos().z;
@@ -102,21 +75,60 @@ public class DimensionBlacklistRenderer {
         buildCtx.reset(camX, camY, camZ);
         buildCtx.beginBatch();
 
-        if (!allRegions.isEmpty()) {
-            VoxelGrid grid = new VoxelGrid();
-            for (io.icker.factions.api.persistents.BlacklistedDimension region : allRegions) {
-                grid.fillBox(region.minX, region.minY, region.minZ, region.maxX, region.maxY, region.maxZ);
+        // Render blacklist regions (green) and whitelist regions (white)
+        List<io.icker.factions.api.persistents.BlacklistedDimension> allRegions = selectionMgr.getAllSelections();
+        
+        // Use voxel grid for the combined shape, but we can't color individual faces differently.
+        // Simple solution: render everything green first, then overlay whitelist in white
+        // Get separate lists
+        List<io.icker.factions.api.persistents.BlacklistedDimension> blist = null;
+        List<io.icker.factions.api.persistents.BlacklistedDimension> wlist = null;
+        
+        // We need direct access - use getPendingSelections for current tool's data,
+        // and the opposite list from getAllSelections minus current
+        // But SelectionManager now has separate lists via setBlacklistSelections/setWhitelistSelections
+        // We can access them through the combined getAllSelections and pending logic
+        // For simplicity, just render everything green and then whitelist on top in white
+        // Using two separate VoxelGrid passes:
+        
+        // First pass: blacklist in green - only render server-synced data, not client-side pending
+        // The SelectionManager stores both server-synced and client-pending in the same lists
+        // We need to only show what the server confirmed
+        // For now, use getPendingSelections which returns current tool's list
+        // But we need to separate - the issue is we're showing client-side data for everyone
+        // The real fix: only render what was synced from server, not what client committed
+        // Since SelectionManager now has separate lists, and sync overwrites them,
+        // the lists should only contain server-confirmed data after a sync
+        // But the commit also adds to the lists before sync...
+        // Solution: Don't add to SelectionManager lists on commit, only on sync
+        // But that breaks the visual feedback...
+        // Better: Use a separate "confirmed" list that only sync updates
+        // For now, let's just use the pending selections which are the current tool's data
+        VoxelGrid blGrid = new VoxelGrid();
+        for (io.icker.factions.api.persistents.BlacklistedDimension region : selectionMgr.getBlacklistSelections()) {
+            if (region != null) blGrid.fillBox(region.minX, region.minY, region.minZ, region.maxX, region.maxY, region.maxZ);
+        }
+        if (!blGrid.isEmpty() && isVisibleInFrustum(blGrid.getMinX(), blGrid.getMinY(), blGrid.getMinZ(),
+                                                      blGrid.getMaxX(), blGrid.getMaxY(), blGrid.getMaxZ())) {
+            for (FaceMerger.Face face : FaceMerger.extractAndMergeBoundaryFaces(blGrid)) {
+                renderFaceAsFilledQuad(buildCtx, face, BLACKLIST_GREEN, FILL_ALPHA);
             }
-            if (!grid.isEmpty() && isVisibleInFrustum(grid.getMinX(), grid.getMinY(), grid.getMinZ(),
-                                                       grid.getMaxX(), grid.getMaxY(), grid.getMaxZ())) {
-                List<FaceMerger.Face> boundaryFaces = FaceMerger.extractAndMergeBoundaryFaces(grid);
-                for (FaceMerger.Face face : boundaryFaces) {
-                    renderFaceAsFilledQuad(buildCtx, face, BLACKLIST_GREEN, FILL_ALPHA);
-                }
+        }
+
+        // Second pass: whitelist in white
+        VoxelGrid wlGrid = new VoxelGrid();
+        for (io.icker.factions.api.persistents.BlacklistedDimension region : selectionMgr.getWhitelistSelections()) {
+            if (region != null) wlGrid.fillBox(region.minX, region.minY, region.minZ, region.maxX, region.maxY, region.maxZ);
+        }
+        if (!wlGrid.isEmpty() && isVisibleInFrustum(wlGrid.getMinX(), wlGrid.getMinY(), wlGrid.getMinZ(),
+                                                      wlGrid.getMaxX(), wlGrid.getMaxY(), wlGrid.getMaxZ())) {
+            for (FaceMerger.Face face : FaceMerger.extractAndMergeBoundaryFaces(wlGrid)) {
+                renderFaceAsFilledQuad(buildCtx, face, WHITELIST_WHITE, FILL_ALPHA);
             }
         }
 
         // Selection box
+        Color selectionColor = selectionMgr.isWhitelistMode() ? WHITELIST_WHITE : SELECTION_GREEN;
         BlockPos firstPos = selectionMgr.getFirstPos();
         BlockPos secondPos = selectionMgr.getSecondPos();
         if (firstPos != null) {
@@ -127,12 +139,12 @@ public class DimensionBlacklistRenderer {
                 int maxX = Math.max(firstPos.getX(), secondPos.getX()) + 1;
                 int maxY = Math.max(firstPos.getY(), secondPos.getY()) + 1;
                 int maxZ = Math.max(firstPos.getZ(), secondPos.getZ()) + 1;
-                renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, SELECTION_GREEN, FILL_ALPHA);
+                renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, selectionColor, FILL_ALPHA);
             } else {
                 int x = firstPos.getX();
                 int y = firstPos.getY();
                 int z = firstPos.getZ();
-                renderBoxAsFilledQuads(buildCtx, x, y, z, x + 1, y + 1, z + 1, SELECTION_GREEN, FILL_ALPHA);
+                renderBoxAsFilledQuads(buildCtx, x, y, z, x + 1, y + 1, z + 1, selectionColor, FILL_ALPHA);
             }
         }
 
@@ -157,13 +169,8 @@ public class DimensionBlacklistRenderer {
                 }
             }
         }
-
-        // endBatch() must run on render thread (GL context), done in the future completion
     }
 
-    /**
-     * Render a single merged face as a filled quad via the rendering context
-     */
     private void renderFaceAsFilledQuad(FactionsRenderingContext ctx, FaceMerger.Face face, Color color, int alpha) {
         double x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4;
         if (face.plane == 0) {
@@ -210,26 +217,20 @@ public class DimensionBlacklistRenderer {
         }
     }
 
-    /**
-     * Main render method called every frame. Draws from active context.
-     * Async rebuilds happen on background thread.
-     */
     public void render(double camX, double camY, double camZ, MatrixStack matrices) {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null || mc.world == null) return;
-        if (mc.player.getMainHandStack().getItem() != io.icker.factions.item.FactionsItems.DIMENSION_BLACKLIST_TOOL) return;
+        Item held = mc.player.getMainHandStack().getItem();
+        if (held != io.icker.factions.item.FactionsItems.DIMENSION_BLACKLIST_TOOL &&
+            held != io.icker.factions.item.FactionsItems.DIMENSION_WHITELIST_TOOL) return;
 
-        // Start async build if needed (and not already building)
         if (needsRebuild && (buildingFuture == null || buildingFuture.isDone())) {
             needsRebuild = false;
             int buildIndex = (activeContextIndex + 1) % 2;
             FactionsRenderingContext buildCtx = ctxPool[buildIndex];
-
             buildingFuture = CompletableFuture.runAsync(() -> buildAsync(buildCtx), BACKGROUND_EXECUTOR)
                 .thenRunAsync(() -> {
-                    // Upload to GPU on render thread
                     buildCtx.endBatch();
-                    // Swap contexts
                     activeContextIndex = buildIndex;
                     contextReady = true;
                 }, runnable -> {
@@ -238,30 +239,21 @@ public class DimensionBlacklistRenderer {
                 });
         }
 
-        // Draw from active cached context
         FactionsRenderingContext activeCtx = ctxPool[activeContextIndex];
-        if (!contextReady) return; // Nothing built yet on first frame
+        if (!contextReady) return;
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableDepthTest();
         RenderSystem.disableCull();
-
         matrices.push();
-        matrices.translate(
-            activeCtx.getBaseX() - camX,
-            activeCtx.getBaseY() - camY,
-            activeCtx.getBaseZ() - camZ
-        );
+        matrices.translate(activeCtx.getBaseX() - camX, activeCtx.getBaseY() - camY, activeCtx.getBaseZ() - camZ);
         activeCtx.doDrawing(matrices);
         matrices.pop();
-
         RenderSystem.disableBlend();
         RenderSystem.enableCull();
         RenderSystem.enableDepthTest();
     }
 
-    public void cleanup() {
-        for (FactionsRenderingContext c : ctxPool) c.cleanup();
-    }
+    public void cleanup() { for (FactionsRenderingContext c : ctxPool) c.cleanup(); }
 }

@@ -16,36 +16,40 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
 /**
- * Command for managing dimension blacklists
- * /f dimension list - Show all blacklisted dimensions
- * /f dimension commit - Commit pending selections to the faction blacklist
- * /f dimension cancel - Cancel pending selections
- * /f dimension clear - Clear all blacklisted dimensions
- * /f dimension remove <id> - Remove a specific blacklisted dimension
+ * Command for managing dimension blacklists and whitelists
+ * /f dimension blacklist list - Show all blacklisted dimensions
+ * /f dimension blacklist clear - Clear all blacklisted dimensions
+ * /f dimension whitelist list - Show all whitelisted dimensions
+ * /f dimension whitelist clear - Clear all whitelisted dimensions
  */
 public class DimensionCommand implements Command {
     
     @Override
     public LiteralCommandNode<ServerCommandSource> getNode() {
         LiteralCommandNode<ServerCommandSource> node = CommandManager.literal("dimension")
-                .then(CommandManager.literal("list")
-                        .executes(this::list))
-                .then(CommandManager.literal("clear")
-                        .executes(this::clear))
-                .executes(this::list)
+                .then(CommandManager.literal("blacklist")
+                    .then(CommandManager.literal("list")
+                        .executes(ctx -> list(ctx, false)))
+                    .then(CommandManager.literal("clear")
+                        .executes(ctx -> clear(ctx, false))))
+                .then(CommandManager.literal("whitelist")
+                    .then(CommandManager.literal("list")
+                        .executes(ctx -> list(ctx, true)))
+                    .then(CommandManager.literal("clear")
+                        .executes(ctx -> clear(ctx, true))))
                 .build();
         
         return node;
     }
     
-    private int list(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+    private int list(CommandContext<ServerCommandSource> context, boolean isWhitelist) throws CommandSyntaxException {
         ServerCommandSource source = context.getSource();
         ServerPlayerEntity player = source.getPlayerOrThrow();
         
-        if (player == null)
-            return 0;
+        if (player == null) return 0;
         
-        User user = User.get(player.getUuid());
+        // Use Command.getUser to properly handle /f admin spoof
+        User user = Command.getUser(player);
         Faction faction = user.getFaction();
         
         if (faction == null) {
@@ -53,19 +57,23 @@ public class DimensionCommand implements Command {
             return 0;
         }
         
-
+        // Ensure data is loaded from JSON BEFORE accessing the list
+        if (isWhitelist) faction.loadDimensionWhitelistFromJson();
+        else faction.loadDimensionBlacklistFromJson();
         
-        // Ensure dimension blacklist is loaded from JSON before displaying
-        faction.loadDimensionBlacklistFromJson();
+        String typeLabel = isWhitelist ? "whitelisted" : "blacklisted";
         
-        if (faction.dimensionBlacklist.isEmpty()) {
-            new Message("No dimensions are blacklisted").send(player, false);
-            return 1;
+        // Get the list AFTER loading from JSON
+        java.util.List<BlacklistedDimension> list = isWhitelist ? faction.dimensionWhitelist : faction.dimensionBlacklist;
+        
+        if (list.isEmpty()) {
+            new Message("No dimensions are " + typeLabel).send(player, false);
+            return 0;
         }
         
-        new Message("Blacklisted dimensions:").send(player, false);
-        for (int i = 0; i < faction.dimensionBlacklist.size(); i++) {
-            BlacklistedDimension dim = faction.dimensionBlacklist.get(i);
+        new Message((isWhitelist ? "White" : "Black") + "listed dimensions:").send(player, false);
+        for (int i = 0; i < list.size(); i++) {
+            BlacklistedDimension dim = list.get(i);
             new Message(i + ": ").add(new Message(dim.name).format(Formatting.YELLOW))
                     .add(" @ " + dim.world).send(player, false);
         }
@@ -73,14 +81,14 @@ public class DimensionCommand implements Command {
     }
 
     
-    private int clear(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+    private int clear(CommandContext<ServerCommandSource> context, boolean isWhitelist) throws CommandSyntaxException {
         ServerCommandSource source = context.getSource();
         ServerPlayerEntity player = source.getPlayerOrThrow();
         
-        if (player == null)
-            return 0;
+        if (player == null) return 0;
         
-        User user = User.get(player.getUuid());
+        // Use Command.getUser to properly handle /f admin spoof
+        User user = Command.getUser(player);
         Faction faction = user.getFaction();
         
         if (faction == null) {
@@ -89,23 +97,30 @@ public class DimensionCommand implements Command {
         }
         
         if (user.rank != User.Rank.OWNER) {
-            new Message("Only faction owner can clear dimension blacklists").fail().send(player, false);
+            new Message("Only faction owner can clear dimension " + (isWhitelist ? "whitelists" : "blacklists")).fail().send(player, false);
             return 0;
         }
         
-        int count = faction.dimensionBlacklist.size();
-        faction.dimensionBlacklist.clear();
-        // Force clear - must pass true to override the accidental data loss protection
-        faction.saveDimensionBlacklistToJson(true);
-        // Trigger MODIFY event and save all factions
+        // Ensure data is loaded from JSON BEFORE accessing the list
+        if (isWhitelist) faction.loadDimensionWhitelistFromJson();
+        else faction.loadDimensionBlacklistFromJson();
+        
+        // Get the list AFTER loading from JSON
+        java.util.List<BlacklistedDimension> list = isWhitelist ? faction.dimensionWhitelist : faction.dimensionBlacklist;
+        String typeLabel = isWhitelist ? "whitelisted" : "blacklisted";
+        
+        int count = list.size();
+        list.clear();
+        if (isWhitelist) faction.saveDimensionWhitelistToJson(true);
+        else faction.saveDimensionBlacklistToJson(true);
+        
         io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
         Faction.save();
         
-        // Broadcast cleared dimensions to all faction members so their tools stay in sync
         io.icker.factions.network.DimensionNetworkHandler.broadcastDimensionsToFaction(faction);
         
         new Message("Cleared ").add(new Message(count + "").format(Formatting.YELLOW))
-                .add(" blacklisted dimensions").send(player, false);
+                .add(" " + typeLabel + " dimensions").send(player, false);
         return 1;
     }
 }

@@ -8,31 +8,28 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtList;
 
 /**
- * Packet for syncing dimension blacklist from server to client
+ * Packet for syncing dimension blacklist/whitelist from server to client
  */
 public class DimensionSyncPacket {
     public List<BlacklistedDimension> dimensions;
+    public boolean isWhitelist;
 
     public DimensionSyncPacket(List<BlacklistedDimension> dimensions) {
         this.dimensions = new ArrayList<>(dimensions);
+        this.isWhitelist = false;
     }
 
     public DimensionSyncPacket() {
         this.dimensions = new ArrayList<>();
+        this.isWhitelist = false;
     }
 
-    /**
-     * Serialize dimensions to NBT for network transmission
-     */
     public NbtCompound toNbt() {
         NbtCompound tag = new NbtCompound();
         NbtList dimensionsList = new NbtList();
 
         for (BlacklistedDimension dim : this.dimensions) {
-            if (dim == null || dim.world == null) {
-
-                continue;
-            }
+            if (dim == null || dim.world == null) continue;
             
             NbtCompound dimTag = new NbtCompound();
             dimTag.putString("world", dim.world);
@@ -47,15 +44,13 @@ public class DimensionSyncPacket {
         }
 
         tag.put("dimensions", dimensionsList);
+        tag.putBoolean("isWhitelist", isWhitelist);
         return tag;
     }
 
-    /**
-     * Deserialize dimensions from NBT
-     */
     public static DimensionSyncPacket fromNbt(NbtCompound tag) {
         DimensionSyncPacket packet = new DimensionSyncPacket();
-        NbtList dimensionsList = tag.getList("dimensions", 10); // 10 = NBTTagCompound
+        NbtList dimensionsList = tag.getList("dimensions", 10);
 
         for (int i = 0; i < dimensionsList.size(); i++) {
             NbtCompound dimTag = dimensionsList.getCompound(i);
@@ -72,6 +67,7 @@ public class DimensionSyncPacket {
             packet.dimensions.add(dim);
         }
 
+        packet.isWhitelist = tag.getBoolean("isWhitelist");
         return packet;
     }
 }

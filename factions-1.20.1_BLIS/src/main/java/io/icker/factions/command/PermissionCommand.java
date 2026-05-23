@@ -128,6 +128,77 @@ public class PermissionCommand implements Command {
         return changeGuest(context, false);
     }
 
+    /** === Member permission methods === */
+    
+    private int changeMember(CommandContext<ServerCommandSource> context, boolean add) throws CommandSyntaxException {
+        String permissionName = StringArgumentType.getString(context, "permission");
+        ServerCommandSource source = context.getSource();
+        ServerPlayerEntity player = source.getPlayerOrThrow();
+
+        if (player == null) return 0;
+
+        User user = Command.getUser(player);
+        Faction faction = user.getFaction();
+
+        if (faction == null) {
+            new Message("You must be in a faction").fail().send(player, false);
+            return 0;
+        }
+
+        Permissions permission;
+        try {
+            permission = Permissions.valueOf(permissionName);
+        } catch (IllegalArgumentException e) {
+            new Message("Not a valid permission").fail().send(player, false);
+            return 0;
+        }
+
+        boolean hasPerm = faction.member_permissions.contains(permission);
+        if ((!hasPerm && !add) || (hasPerm && add)) {
+            new Message(String.format("Could not change because the permission %s",
+                    hasPerm ? "already exists" : "doesn't exist")).fail().send(player, false);
+            return 0;
+        }
+
+        if (add) {
+            faction.member_permissions.add(permission);
+        } else {
+            faction.member_permissions.remove(permission);
+        }
+
+        new Message("Successfully changed permissions").send(player, false);
+        return 1;
+    }
+
+    private int addMember(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        return changeMember(context, true);
+    }
+
+    private int removeMember(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        return changeMember(context, false);
+    }
+
+    private int listMember(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        ServerCommandSource source = context.getSource();
+        ServerPlayerEntity player = source.getPlayerOrThrow();
+
+        if (player == null) return 0;
+
+        User user = Command.getUser(player);
+        Faction faction = user.getFaction();
+
+        if (faction == null) {
+            new Message("You must be in a faction").fail().send(player, false);
+            return 0;
+        }
+
+        String permissionsList = faction.member_permissions.stream().map(Enum::toString)
+                .collect(Collectors.joining(","));
+
+        new Message(String.format("Members have the permissions: %s", permissionsList)).send(player, false);
+        return 1;
+    }
+
     private int list(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         ServerCommandSource source = context.getSource();
         ServerPlayerEntity player = source.getPlayerOrThrow();
@@ -200,7 +271,10 @@ public class PermissionCommand implements Command {
                                 .then(CommandManager.literal("guest")
                                         .requires(Requires.hasPerms("factions.permission.add.guest",
                                                 0))
-                                        .executes(this::addGuest))))
+                                        .executes(this::addGuest))
+                                .then(CommandManager.literal("member")
+                                        .requires(Requires.hasPerms("factions.permission.add.member", 0))
+                                        .executes(this::addMember))))
                 .then(CommandManager.literal("remove")
                         .requires(Requires.hasPerms("factions.permission.remove", 0))
                         .then(CommandManager.argument("permission", StringArgumentType.word())
@@ -216,7 +290,10 @@ public class PermissionCommand implements Command {
                                 .then(CommandManager.literal("guest")
                                         .requires(Requires
                                                 .hasPerms("factions.permission.remove.guest", 0))
-                                        .executes(this::removeGuest))))
+                                        .executes(this::removeGuest))
+                                .then(CommandManager.literal("member")
+                                        .requires(Requires.hasPerms("factions.permission.remove.member", 0))
+                                        .executes(this::removeMember))))
                 .then(CommandManager
                         .literal("list").requires(Requires.hasPerms("factions.permission.list",
                                 0))
@@ -228,7 +305,10 @@ public class PermissionCommand implements Command {
                                         .executes(this::list)))
                         .then(CommandManager.literal("guest")
                                 .requires(Requires.hasPerms("factions.permission.list.guest", 0))
-                                .executes(this::listGuest)))
+                                .executes(this::listGuest))
+                        .then(CommandManager.literal("member")
+                                .requires(Requires.hasPerms("factions.permission.list.member", 0))
+                                .executes(this::listMember)))
                 .build();
     }
 }

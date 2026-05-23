@@ -10,19 +10,14 @@ import io.icker.factions.client.event.SelectionManager;
  */
 public class DimensionClientSyncHandler {
     public static void register() {
-        // Register handler for dimension sync packets from server
         ClientPlayNetworking.registerGlobalReceiver(DimensionNetworkHandler.SYNC_PACKET_ID, 
             (client, handler, buf, responseSender) -> {
                 handleSyncPacket(buf);
             });
     }
 
-    /**
-     * Handle incoming sync packet from server
-     */
     private static void handleSyncPacket(PacketByteBuf buf) {
         try {
-            // Read the NBT data
             byte[] nbtBytes = new byte[buf.readableBytes()];
             buf.readBytes(nbtBytes);
             
@@ -33,7 +28,6 @@ public class DimensionClientSyncHandler {
                 io.icker.factions.network.DimensionSyncPacket packet = 
                     io.icker.factions.network.DimensionSyncPacket.fromNbt(nbtCompound);
                 
-                // Filter out any dimensions with null world
                 java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> validDimensions = 
                     new java.util.ArrayList<>();
                 for (io.icker.factions.api.persistents.BlacklistedDimension dim : packet.dimensions) {
@@ -42,15 +36,17 @@ public class DimensionClientSyncHandler {
                     }
                 }
                 
-                // Update client-side pending selections with synced data
+                // Update client-side selections with synced data
                 SelectionManager selectionMgr = SelectionManager.getInstance();
-                selectionMgr.setPendingSelections(validDimensions);
+                if (packet.isWhitelist) {
+                    selectionMgr.setWhitelistSelections(validDimensions);
+                } else {
+                    selectionMgr.setBlacklistSelections(validDimensions);
+                }
                 
-                // Mark renderer for rebuild with new data
                 io.icker.factions.client.render.DimensionBlacklistRenderer.getInstance().markNeedsRebuild();
             }
         } catch (Exception e) {
-
             e.printStackTrace();
         }
     }

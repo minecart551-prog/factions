@@ -18,29 +18,26 @@ public class DimensionCommitPacket {
     public int totalChunks;
     public int chunkIndex;
     public boolean isChunk;
+    public boolean isWhitelist;
 
     public DimensionCommitPacket(List<BlacklistedDimension> dimensions) {
         this.dimensions = new ArrayList<>(dimensions);
         this.isChunk = false;
+        this.isWhitelist = false;
     }
 
     public DimensionCommitPacket() {
         this.dimensions = new ArrayList<>();
         this.isChunk = false;
+        this.isWhitelist = false;
     }
 
-    /**
-     * Serialize dimensions to NBT for network transmission
-     */
     public NbtCompound toNbt() {
         NbtCompound tag = new NbtCompound();
         NbtList dimensionsList = new NbtList();
 
         for (BlacklistedDimension dim : this.dimensions) {
-            if (dim == null || dim.world == null) {
-
-                continue;
-            }
+            if (dim == null || dim.world == null) continue;
             
             NbtCompound dimTag = new NbtCompound();
             dimTag.putString("world", dim.world);
@@ -55,8 +52,8 @@ public class DimensionCommitPacket {
         }
 
         tag.put("dimensions", dimensionsList);
+        tag.putBoolean("isWhitelist", isWhitelist);
         
-        // Chunking metadata
         if (isChunk) {
             if (sessionId != null) tag.putUuid("sessionId", sessionId);
             tag.putInt("totalChunks", totalChunks);
@@ -66,12 +63,9 @@ public class DimensionCommitPacket {
         return tag;
     }
 
-    /**
-     * Deserialize dimensions from NBT
-     */
     public static DimensionCommitPacket fromNbt(NbtCompound tag) {
         DimensionCommitPacket packet = new DimensionCommitPacket();
-        NbtList dimensionsList = tag.getList("dimensions", 10); // 10 = NBTTagCompound
+        NbtList dimensionsList = tag.getList("dimensions", 10);
 
         for (int i = 0; i < dimensionsList.size(); i++) {
             NbtCompound dimTag = dimensionsList.getCompound(i);
@@ -88,20 +82,17 @@ public class DimensionCommitPacket {
             packet.dimensions.add(dim);
         }
 
-        // Check if this is a chunk
+        packet.isWhitelist = tag.getBoolean("isWhitelist");
+        
         if (tag.contains("sessionId")) {
             packet.isChunk = true;
             packet.sessionId = tag.getUuid("sessionId");
             packet.totalChunks = tag.getInt("totalChunks");
             packet.chunkIndex = tag.getInt("chunkIndex");
         }
-
         return packet;
     }
     
-    /**
-     * Compute the actual serialized byte size of this packet by writing it to a temp buffer.
-     */
     public long computeSerializedSize() {
         try {
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();

@@ -18,15 +18,20 @@ public class FactionsItems {
     public static final Item DIMENSION_BLACKLIST_TOOL = registerItem("dimension_blacklist_tool",
             new DimensionBlacklistTool(new Item.Settings()
                     .maxCount(1)));
+    
+    public static final Item DIMENSION_WHITELIST_TOOL = registerItem("dimension_whitelist_tool",
+            new DimensionWhitelistTool(new Item.Settings()
+                    .maxCount(1)));
 
     private static Item registerItem(String name, Item item) {
         return Registry.register(Registries.ITEM, new Identifier(FactionsMod.MODID, name), item);
     }
 
     public static void register() {
-        // Add dimension blacklist tool to creative tab
+        // Add dimension tools to creative tab
         ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register(content -> {
             content.add(new ItemStack(DIMENSION_BLACKLIST_TOOL));
+            content.add(new ItemStack(DIMENSION_WHITELIST_TOOL));
         });
     }
 }

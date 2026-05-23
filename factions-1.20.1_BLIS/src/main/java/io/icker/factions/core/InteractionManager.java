@@ -70,57 +70,57 @@ public class InteractionManager {
      * Uses the same box subtraction logic as the client-side delete tool.
      */
     private static void onClaimRemove(int chunkX, int chunkZ, String level, Faction faction) {
-        if (faction == null) {
-            return;
+        if (faction == null) return;
+        
+        // Process both blacklist and whitelist
+        boolean changed = subtractClaimFromList(faction, faction.dimensionBlacklist, level, chunkX, chunkZ, false);
+        boolean whitelistChanged = subtractClaimFromList(faction, faction.dimensionWhitelist, level, chunkX, chunkZ, true);
+        
+        if (changed || whitelistChanged) {
+            Faction.save();
+            io.icker.factions.network.DimensionNetworkHandler.broadcastDimensionsToFaction(faction);
         }
+    }
+    
+    /**
+     * Subtract a claim chunk from a dimension list (blacklist or whitelist)
+     */
+    private static boolean subtractClaimFromList(Faction faction, java.util.List<BlacklistedDimension> list, 
+                                                  String level, int chunkX, int chunkZ, boolean isWhitelist) {
+        // Load from JSON
+        if (!isWhitelist) faction.loadDimensionBlacklistFromJson();
+        else faction.loadDimensionWhitelistFromJson();
         
-        // Ensure dimensions are loaded from JSON
-        faction.loadDimensionBlacklistFromJson();
+        if (list.isEmpty()) return false;
         
-        if (faction.dimensionBlacklist.isEmpty()) {
-            return;
-        }
-        
-        // Calculate the block boundaries of the removed claim (chunk to block conversion)
         int claimMinX = chunkX * 16;
-        int claimMaxX = (chunkX + 1) * 16 - 1; // Inclusive
+        int claimMaxX = (chunkX + 1) * 16 - 1;
         int claimMinZ = chunkZ * 16;
-        int claimMaxZ = (chunkZ + 1) * 16 - 1; // Inclusive
-        int claimHeight = 320; // Full world height for removal
+        int claimMaxZ = (chunkZ + 1) * 16 - 1;
         
-        boolean changed = false;
         java.util.List<BlacklistedDimension> updatedList = new java.util.ArrayList<>();
+        boolean changed = false;
         
-        for (BlacklistedDimension dim : faction.dimensionBlacklist) {
-            // Check if dimension is in the same world/level
+        for (BlacklistedDimension dim : list) {
             if (!dim.world.equals(level)) {
                 updatedList.add(dim);
                 continue;
             }
-            
-            // Check if dimension overlaps with the claim
-            if (dim.minX <= claimMaxX && dim.maxX >= claimMinX && 
-                dim.minZ <= claimMaxZ && dim.maxZ >= claimMinZ) {
-                
-                // Subtract the claim chunk from this dimension
-                java.util.List<BlacklistedDimension> subtracted = subtractBlacklistedClaim(dim, 
-                    claimMinX, claimMaxX, claimMinZ, claimMaxZ);
-                updatedList.addAll(subtracted);
+            if (dim.minX <= claimMaxX && dim.maxX >= claimMinX && dim.minZ <= claimMaxZ && dim.maxZ >= claimMinZ) {
+                updatedList.addAll(subtractBlacklistedClaim(dim, claimMinX, claimMaxX, claimMinZ, claimMaxZ));
                 changed = true;
             } else {
-                // No overlap - keep the dimension as-is
                 updatedList.add(dim);
             }
         }
         
         if (changed) {
-            faction.dimensionBlacklist.clear();
-            faction.dimensionBlacklist.addAll(updatedList);
-            faction.saveDimensionBlacklistToJson();
-            Faction.save();
-            // Broadcast dimension changes to all online faction members
-            io.icker.factions.network.DimensionNetworkHandler.broadcastDimensionsToFaction(faction);
+            list.clear();
+            list.addAll(updatedList);
+            if (isWhitelist) faction.saveDimensionWhitelistToJson();
+            else faction.saveDimensionBlacklistToJson();
         }
+        return changed;
     }
     
     /**
@@ -176,23 +176,18 @@ public class InteractionManager {
     }
     
     /**
-     * When a faction is disbanded, clear all its blacklisted dimensions
+     * When a faction is disbanded, clear all its blacklisted and whitelisted dimensions
      */
     private static void onFactionDisband(Faction faction) {
-        if (faction == null) {
-            return;
-        }
+        if (faction == null) return;
         
-        // Ensure dimensions are loaded from JSON
         faction.loadDimensionBlacklistFromJson();
+        faction.loadDimensionWhitelistFromJson();
         
-        if (faction.dimensionBlacklist.isEmpty()) {
-            return;
-        }
+        if (!faction.dimensionBlacklist.isEmpty()) faction.dimensionBlacklist.clear();
+        if (!faction.dimensionWhitelist.isEmpty()) faction.dimensionWhitelist.clear();
         
-        faction.dimensionBlacklist.clear();
         Faction.save();
-        // Broadcast dimension changes to all online faction members
         io.icker.factions.network.DimensionNetworkHandler.broadcastDimensionsToFaction(faction);
     }
 
@@ -506,6 +501,15 @@ public class InteractionManager {
 
         Faction claimFaction = claim.getFaction();
 
+        // Whitelist bypass: if position is in a whitelisted dimension of the claiming faction,
+        // allow all interactions (overrides guest permissions, member restrictions, etc.)
+        for (BlacklistedDimension whitelistedDim : claimFaction.dimensionWhitelist) {
+            if (whitelistedDim.contains(dimension, position.getX(), position.getY(), position.getZ())) {
+                if (dbg) FactionsMod.LOGGER.info("{}position in whitelisted region -> SUCCESS", prefix);
+                return ActionResult.SUCCESS;
+            }
+        }
+
         if (!claimFaction.isAdminProtected() && claimFaction.getClaims().size() * FactionsMod.CONFIG.POWER.CLAIM_WEIGHT > claimFaction
                 .getPower()) {
             if (dbg) FactionsMod.LOGGER.info("{}claim faction \"{}\" underpowered -> PASS",
@@ -529,14 +533,29 @@ public class InteractionManager {
         }
 
         if (claimFaction.getID().equals(userFaction.getID())) {
-            boolean rankOk = getRankLevel(claim.accessLevel) <= getRankLevel(user.rank);
-            boolean guestOk = user.rank == User.Rank.GUEST
-                    && claimFaction.guest_permissions.contains(permission)
+            // Leadership ranks always bypass member_permissions
+            if (user.rank == User.Rank.OWNER || user.rank == User.Rank.LEADER || user.rank == User.Rank.COMMANDER) {
+                boolean rankOk = getRankLevel(claim.accessLevel) <= getRankLevel(user.rank);
+                if (dbg) FactionsMod.LOGGER.info("{}own faction leadership, rank={} accessLevel={} rankOk={} -> {}",
+                        prefix, user.rank, claim.accessLevel, rankOk, rankOk ? "SUCCESS" : "FAIL");
+                return rankOk ? ActionResult.SUCCESS : ActionResult.FAIL;
+            }
+            
+            // For MEMBER rank, check member_permissions
+            if (user.rank == User.Rank.MEMBER) {
+                boolean allowed = getRankLevel(claim.accessLevel) <= getRankLevel(user.rank)
+                        && claimFaction.member_permissions.contains(permission);
+                if (dbg) FactionsMod.LOGGER.info("{}own faction member, perm={} member_perms_allow={} -> {}",
+                        prefix, permission, allowed, allowed ? "SUCCESS" : "FAIL");
+                return allowed ? ActionResult.SUCCESS : ActionResult.FAIL;
+            }
+            
+            // Guest in own faction - check guest_permissions (for member-access claims)
+            boolean guestOk = claimFaction.guest_permissions.contains(permission)
                     && claim.accessLevel == User.Rank.MEMBER;
-            boolean allowed = rankOk || guestOk;
-            if (dbg) FactionsMod.LOGGER.info("{}own faction, rank={} accessLevel={} rankOk={} guestOk={} -> {}",
-                    prefix, user.rank, claim.accessLevel, rankOk, guestOk, allowed ? "SUCCESS" : "FAIL");
-            return allowed ? ActionResult.SUCCESS : ActionResult.FAIL;
+            if (dbg) FactionsMod.LOGGER.info("{}own faction guest, guestOk={} -> {}",
+                    prefix, guestOk, guestOk ? "SUCCESS" : "FAIL");
+            return guestOk ? ActionResult.SUCCESS : ActionResult.FAIL;
         }
 
         if (FactionsMod.CONFIG.RELATIONSHIPS.ALLY_OVERRIDES_PERMISSIONS
