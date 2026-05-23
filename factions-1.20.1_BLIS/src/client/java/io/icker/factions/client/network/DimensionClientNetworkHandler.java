@@ -25,27 +25,43 @@ public class DimensionClientNetworkHandler {
     /**
      * Send pending selections to server for commitment.
      * Automatically splits into chunks if the data exceeds MAX_PACKET_SIZE.
+     * Uses actual serialized size measurement for accuracy.
      */
     public static void commitDimensions(List<BlacklistedDimension> dimensions) {
         try {
-            // Estimate total size
-            long estimatedSize = io.icker.factions.network.DimensionCommitPacket.estimateSize(dimensions.size());
+            UUID sessionId = UUID.randomUUID();
+            List<List<BlacklistedDimension>> chunks = new ArrayList<>();
+            List<BlacklistedDimension> currentChunk = new ArrayList<>();
             
-            if (estimatedSize <= MAX_PACKET_SIZE) {
-                // Small enough for a single packet
-                sendSingleCommit(dimensions, false, null, 0, 0);
-            } else {
-                // Split into chunks
-                int dimsPerChunk = Math.max(1, (int)(dimensions.size() * MAX_PACKET_SIZE / estimatedSize));
-                UUID sessionId = UUID.randomUUID();
-                List<List<BlacklistedDimension>> chunks = new ArrayList<>();
+            // Batch dimensions by actual serialized size
+            for (BlacklistedDimension dim : dimensions) {
+                // Test size with this dimension added
+                List<BlacklistedDimension> testBatch = new ArrayList<>(currentChunk);
+                testBatch.add(dim);
+                io.icker.factions.network.DimensionCommitPacket testPacket = 
+                    new io.icker.factions.network.DimensionCommitPacket(testBatch);
+                testPacket.isChunk = true;
+                testPacket.sessionId = sessionId;
                 
-                for (int i = 0; i < dimensions.size(); i += dimsPerChunk) {
-                    int end = Math.min(i + dimsPerChunk, dimensions.size());
-                    chunks.add(dimensions.subList(i, end));
+                if (testPacket.computeSerializedSize() > MAX_PACKET_SIZE && !currentChunk.isEmpty()) {
+                    // Start new chunk
+                    chunks.add(currentChunk);
+                    currentChunk = new ArrayList<>();
                 }
                 
-                int totalChunks = chunks.size();
+                currentChunk.add(dim);
+            }
+            
+            // Add remaining
+            if (!currentChunk.isEmpty()) {
+                chunks.add(currentChunk);
+            }
+            
+            // Send all chunks
+            int totalChunks = chunks.size();
+            if (totalChunks == 1) {
+                sendSingleCommit(chunks.get(0), false, null, 0, 0);
+            } else {
                 for (int i = 0; i < totalChunks; i++) {
                     sendSingleCommit(chunks.get(i), true, sessionId, totalChunks, i);
                 }

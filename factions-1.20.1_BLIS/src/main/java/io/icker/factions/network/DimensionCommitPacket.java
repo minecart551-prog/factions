@@ -100,10 +100,16 @@ public class DimensionCommitPacket {
     }
     
     /**
-     * Estimate the byte size of serialized dimensions for a given count
+     * Compute the actual serialized byte size of this packet by writing it to a temp buffer.
      */
-    public static long estimateSize(int dimensionCount) {
-        // Approximate: each dimension has ~7 ints (28 bytes) + 2 strings (~40 bytes) + NBT overhead (~30 bytes)
-        return (long)dimensionCount * 100L + 64L;
+    public long computeSerializedSize() {
+        try {
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            java.io.DataOutputStream dos = new java.io.DataOutputStream(baos);
+            net.minecraft.nbt.NbtIo.write(toNbt(), dos);
+            return baos.size();
+        } catch (Exception e) {
+            return Long.MAX_VALUE;
+        }
     }
 }
