@@ -408,20 +408,7 @@ public class InteractionManager {
 
     private static ActionResult onUseEntity(PlayerEntity player, Entity entity, World world) {
         if (world.isClient()) return ActionResult.PASS;
-        BlockPos pos;
-        if (entity == null) {
-            pos = player.getBlockPos();
-        } else {
-            pos = entity.getBlockPos();
-            String entityId = Registries.ENTITY_TYPE.getId(entity.getType()).toString();
-            if (isMobExempt(entityId)) return ActionResult.PASS;
-        }
-
-        if (checkPermissions(player, pos, world, Permissions.USE_ENTITIES) == ActionResult.FAIL) {
-            InteractionsUtil.warn(player, InteractionsUtilActions.USE_ENTITIES);
-            return ActionResult.FAIL;
-        }
-
+        // BLIS: USE_ENTITIES permission is bypassed - always allow entity interaction
         return ActionResult.PASS;
     }
 
