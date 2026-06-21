@@ -504,6 +504,12 @@ public class InteractionManager {
             return ActionResult.PASS;
         }
 
+        // Check for player-specific permission override
+        if (user.permissionOverrides.contains(permission)) {
+            if (dbg) FactionsMod.LOGGER.info("{}player has permission override for {} -> SUCCESS", prefix, permission);
+            return ActionResult.SUCCESS;
+        }
+
         if (!user.isInFaction()) {
             boolean allowed = claimFaction.guest_permissions.contains(permission);
             if (dbg) FactionsMod.LOGGER.info("{}player has no faction, claim=\"{}\", guest_perm={} -> {}",

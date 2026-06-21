@@ -1,5 +1,6 @@
 package io.icker.factions.api.persistents;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -11,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 
 import io.icker.factions.FactionsMod;
 import io.icker.factions.api.events.FactionEvents;
+import io.icker.factions.api.persistents.Relationship;
 import io.icker.factions.config.PowerConfig;
 import io.icker.factions.database.Database;
 import io.icker.factions.database.Field;
@@ -58,6 +60,9 @@ public class User {
 
     @Field("Power")
     private int power = -1;
+
+    @Field("PermissionOverrides")
+    public ArrayList<Relationship.Permissions> permissionOverrides = new ArrayList<>();
 
     public boolean autoclaim = false;
     public boolean bypass = false;
@@ -143,6 +148,7 @@ public class User {
         UUID oldFactionID = factionID;
         factionID = null;
         rank = null;
+        permissionOverrides.clear();
         FactionEvents.MEMBER_LEAVE.invoker().onMemberLeave(Faction.get(oldFactionID), this);
     }
 
