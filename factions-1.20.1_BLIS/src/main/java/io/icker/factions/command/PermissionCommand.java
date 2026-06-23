@@ -20,7 +20,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.Formatting;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -287,7 +287,6 @@ public class PermissionCommand implements Command {
             return 0;
         }
 
-        // Resolve the target player (can be any player, inside or outside the faction)
         User target;
         Optional<GameProfile> profile;
         if ((profile = source.getServer().getUserCache().findByName(playerName)).isPresent()) {
@@ -350,7 +349,6 @@ public class PermissionCommand implements Command {
             return 0;
         }
 
-        // Resolve the target player (can be any player)
         User target;
         Optional<GameProfile> profile;
         if ((profile = source.getServer().getUserCache().findByName(playerName)).isPresent()) {
@@ -390,8 +388,7 @@ public class PermissionCommand implements Command {
             return 0;
         }
 
-        // Get all users that have permission overrides
-        java.util.List<String> overridesInfo = new java.util.ArrayList<>();
+        List<String> overridesInfo = new ArrayList<>();
         for (User targetUser : User.all()) {
             if (!targetUser.permissionOverrides.isEmpty()) {
                 Optional<GameProfile> prof = source.getServer().getUserCache().getByUuid(targetUser.getID());
@@ -414,21 +411,36 @@ public class PermissionCommand implements Command {
         return 1;
     }
 
+    // ========== Faction suggestion helper ==========
+    // Suggests all other factions, auto-wrapping multi-word names in quotes
+
+    private static SuggestionProvider<ServerCommandSource> suggestOtherFactions() {
+        return (context, builder) -> {
+            for (Faction f : Faction.all()) {
+                User user = Command.getUser(context.getSource().getPlayerOrThrow());
+                if (user.isInFaction() && user.getFaction().getID().equals(f.getID())) continue;
+                String name = f.getName();
+                if (name.contains(" ")) {
+                    builder.suggest("\"" + name + "\"");
+                } else {
+                    builder.suggest(name);
+                }
+            }
+            return builder.buildFuture();
+        };
+    }
+
     // ========== Context-aware permission suggestion providers ==========
 
-    /**
-     * Suggests permissions that are NOT currently set for the given group.
-     * Used for "add" operations.
-     */
     private static SuggestionProvider<ServerCommandSource> suggestAddablePerms(
-            java.util.function.Function<Faction, java.util.List<Permissions>> getCurrentPerms) {
+            java.util.function.Function<Faction, List<Permissions>> getCurrentPerms) {
         return (context, builder) -> {
             ServerPlayerEntity entity = context.getSource().getPlayerOrThrow();
             User user = Command.getUser(entity);
             Faction faction = user.getFaction();
             if (faction == null) return builder.buildFuture();
 
-            java.util.List<Permissions> current = getCurrentPerms.apply(faction);
+            List<Permissions> current = getCurrentPerms.apply(faction);
             for (Permissions perm : Permissions.values()) {
                 if (!current.contains(perm)) {
                     builder.suggest(perm.toString());
@@ -438,19 +450,15 @@ public class PermissionCommand implements Command {
         };
     }
 
-    /**
-     * Suggests permissions that ARE currently set for the given group.
-     * Used for "remove" operations.
-     */
     private static SuggestionProvider<ServerCommandSource> suggestRemovablePerms(
-            java.util.function.Function<Faction, java.util.List<Permissions>> getCurrentPerms) {
+            java.util.function.Function<Faction, List<Permissions>> getCurrentPerms) {
         return (context, builder) -> {
             ServerPlayerEntity entity = context.getSource().getPlayerOrThrow();
             User user = Command.getUser(entity);
             Faction faction = user.getFaction();
             if (faction == null) return builder.buildFuture();
 
-            java.util.List<Permissions> current = getCurrentPerms.apply(faction);
+            List<Permissions> current = getCurrentPerms.apply(faction);
             for (Permissions perm : current) {
                 builder.suggest(perm.toString());
             }
@@ -458,9 +466,6 @@ public class PermissionCommand implements Command {
         };
     }
 
-    /**
-     * Suggests permissions that are NOT currently set for a faction relationship.
-     */
     private static SuggestionProvider<ServerCommandSource> suggestAddableFactionPerms() {
         return (context, builder) -> {
             ServerPlayerEntity entity = context.getSource().getPlayerOrThrow();
@@ -468,8 +473,7 @@ public class PermissionCommand implements Command {
             Faction sourceFaction = user.getFaction();
             if (sourceFaction == null) return builder.buildFuture();
 
-            // Try to get the faction name from the context
-            String factionName = null;
+            String factionName;
             try {
                 factionName = StringArgumentType.getString(context, "faction");
             } catch (IllegalArgumentException e) {
@@ -489,9 +493,6 @@ public class PermissionCommand implements Command {
         };
     }
 
-    /**
-     * Suggests permissions that ARE currently set for a faction relationship.
-     */
     private static SuggestionProvider<ServerCommandSource> suggestRemovableFactionPerms() {
         return (context, builder) -> {
             ServerPlayerEntity entity = context.getSource().getPlayerOrThrow();
@@ -499,7 +500,7 @@ public class PermissionCommand implements Command {
             Faction sourceFaction = user.getFaction();
             if (sourceFaction == null) return builder.buildFuture();
 
-            String factionName = null;
+            String factionName;
             try {
                 factionName = StringArgumentType.getString(context, "faction");
             } catch (IllegalArgumentException e) {
@@ -517,9 +518,6 @@ public class PermissionCommand implements Command {
         };
     }
 
-    /**
-     * Suggests permissions that are NOT currently set for a player's overrides.
-     */
     private static SuggestionProvider<ServerCommandSource> suggestAddablePlayerPerms() {
         return (context, builder) -> {
             ServerPlayerEntity entity = context.getSource().getPlayerOrThrow();
@@ -527,7 +525,7 @@ public class PermissionCommand implements Command {
             Faction faction = user.getFaction();
             if (faction == null) return builder.buildFuture();
 
-            String playerName = null;
+            String playerName;
             try {
                 playerName = StringArgumentType.getString(context, "player");
             } catch (IllegalArgumentException e) {
@@ -547,9 +545,6 @@ public class PermissionCommand implements Command {
         };
     }
 
-    /**
-     * Suggests permissions that ARE currently set for a player's overrides.
-     */
     private static SuggestionProvider<ServerCommandSource> suggestRemovablePlayerPerms() {
         return (context, builder) -> {
             ServerPlayerEntity entity = context.getSource().getPlayerOrThrow();
@@ -557,7 +552,7 @@ public class PermissionCommand implements Command {
             Faction faction = user.getFaction();
             if (faction == null) return builder.buildFuture();
 
-            String playerName = null;
+            String playerName;
             try {
                 playerName = StringArgumentType.getString(context, "player");
             } catch (IllegalArgumentException e) {
@@ -582,10 +577,12 @@ public class PermissionCommand implements Command {
                         Requires.hasPerms("factions.permission", 0)))
 
                 // ===== FACTION =====
+                // Uses StringArgumentType.string() which supports quoted names for multi-word factions
+                // Tab-completion auto-wraps multi-word names in quotes
                 .then(CommandManager.literal("faction")
                         .requires(Requires.hasPerms("factions.permission.faction", 0))
-                        .then(CommandManager.argument("faction", StringArgumentType.word())
-                                .suggests(Suggests.allFactions(false))
+                        .then(CommandManager.argument("faction", StringArgumentType.string())
+                                .suggests(suggestOtherFactions())
                                 .then(CommandManager.literal("add")
                                         .requires(Requires.hasPerms("factions.permission.faction.add", 0))
                                         .then(CommandManager.argument("permission", StringArgumentType.word())
