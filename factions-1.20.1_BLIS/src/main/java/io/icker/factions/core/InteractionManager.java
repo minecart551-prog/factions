@@ -117,8 +117,11 @@ public class InteractionManager {
         if (changed) {
             list.clear();
             list.addAll(updatedList);
-            if (isWhitelist) faction.saveDimensionWhitelistToJson();
-            else faction.saveDimensionBlacklistToJson();
+            // Use forceClear=true when list is empty to override the save guard
+            // that prevents saving empty lists. Without this, carved-away regions
+            // would persist in JSON and be reloaded by ensureDimensionDataLoaded().
+            if (isWhitelist) faction.saveDimensionWhitelistToJson(list.isEmpty());
+            else faction.saveDimensionBlacklistToJson(list.isEmpty());
         }
         return changed;
     }

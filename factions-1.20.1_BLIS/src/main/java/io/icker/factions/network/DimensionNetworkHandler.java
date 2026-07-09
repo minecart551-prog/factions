@@ -107,6 +107,17 @@ public class DimensionNetworkHandler {
                     return;  // Silently reject - non-leadership can't access dimensions
                 }
                 
+                // Clean up stale regions that are outside current claims
+                // This handles the case where claim removal carving failed to persist
+                // (due to the save guard bug) leaving regions referencing unclaimed chunks.
+                faction.loadDimensionBlacklistFromJson();
+                faction.loadDimensionWhitelistFromJson();
+                boolean blChanged = cleanupStaleRegions(faction, faction.dimensionBlacklist);
+                boolean wlChanged = cleanupStaleRegions(faction, faction.dimensionWhitelist);
+                if (blChanged) faction.saveDimensionBlacklistToJson(true);
+                if (wlChanged) faction.saveDimensionWhitelistToJson(true);
+                if (blChanged || wlChanged) Faction.save();
+                
                 // Always send BOTH lists to the client so SelectionManager has complete data
                 // regardless of which tool is held (fixes stale data when spoofing or switching tools)
                 syncDimensionsToPlayer(player, faction.dimensionBlacklist, false);
@@ -193,16 +204,39 @@ public class DimensionNetworkHandler {
                             return;
                         }
                         
-                        // Validate all dimensions are within faction claims
-                        if (!areAllDimensionsInClaims(faction, packet.dimensions)) {
+                        // Ensure both lists are loaded from JSON before any operation
+                        faction.loadDimensionBlacklistFromJson();
+                        faction.loadDimensionWhitelistFromJson();
+                        
+                        // Determine which regions are new (not present in existing data).
+                        // Only validate new regions against claims - existing regions may be stale
+                        // from a carving bug where fully-removed regions weren't saved as empty.
+                        java.util.List<BlacklistedDimension> existingList = packet.isWhitelist ? 
+                            new java.util.ArrayList<>(faction.dimensionWhitelist) : 
+                            new java.util.ArrayList<>(faction.dimensionBlacklist);
+                        java.util.List<BlacklistedDimension> newRegions = new java.util.ArrayList<>();
+                        for (BlacklistedDimension dim : packet.dimensions) {
+                            boolean isNew = true;
+                            for (BlacklistedDimension existing : existingList) {
+                                if (dim.minX == existing.minX && dim.minY == existing.minY && 
+                                    dim.minZ == existing.minZ && dim.maxX == existing.maxX && 
+                                    dim.maxY == existing.maxY && dim.maxZ == existing.maxZ &&
+                                    dim.world != null && dim.world.equals(existing.world)) {
+                                    isNew = false;
+                                    break;
+                                }
+                            }
+                            if (isNew) {
+                                newRegions.add(dim);
+                            }
+                        }
+                        
+                        // Only validate new regions against claims
+                        if (!newRegions.isEmpty() && !areAllDimensionsInClaims(faction, newRegions)) {
                             player.sendMessage(
                                 net.minecraft.text.Text.literal("§cAll selected regions must be within your faction's claimed chunks!"), false);
                             return;
                         }
-                        
-                        // Ensure both lists are loaded from JSON before any operation
-                        faction.loadDimensionBlacklistFromJson();
-                        faction.loadDimensionWhitelistFromJson();
                         
                         // Check for overlap with opposite type
                         if (packet.isWhitelist) {
@@ -307,15 +341,38 @@ public class DimensionNetworkHandler {
                                     net.minecraft.text.Text.literal("§cOnly faction leadership can edit dimension blacklist!"), false);
                                 return;
                             }
-                            if (!areAllDimensionsInClaims(faction, cc.dimensions)) {
+                            // Ensure both lists are loaded from JSON before any operation
+                            faction.loadDimensionBlacklistFromJson();
+                            faction.loadDimensionWhitelistFromJson();
+                            
+                            // Determine which regions are new (not present in existing data)
+                            // Only validate new regions against claims, not existing ones
+                            java.util.List<BlacklistedDimension> existingList = chunk.isWhitelist ? 
+                                new java.util.ArrayList<>(faction.dimensionWhitelist) : 
+                                new java.util.ArrayList<>(faction.dimensionBlacklist);
+                            java.util.List<BlacklistedDimension> newRegions = new java.util.ArrayList<>();
+                            for (BlacklistedDimension dim : cc.dimensions) {
+                                boolean isNew = true;
+                                for (BlacklistedDimension existing : existingList) {
+                                    if (dim.minX == existing.minX && dim.minY == existing.minY && 
+                                        dim.minZ == existing.minZ && dim.maxX == existing.maxX && 
+                                        dim.maxY == existing.maxY && dim.maxZ == existing.maxZ &&
+                                        dim.world != null && dim.world.equals(existing.world)) {
+                                        isNew = false;
+                                        break;
+                                    }
+                                }
+                                if (isNew) {
+                                    newRegions.add(dim);
+                                }
+                            }
+                            
+                            // Only validate new regions against claims
+                            if (!newRegions.isEmpty() && !areAllDimensionsInClaims(faction, newRegions)) {
                                 player.sendMessage(
                                     net.minecraft.text.Text.literal("§cAll selected regions must be within your faction's claimed chunks!"), false);
                                 return;
                             }
-                            
-                            // Ensure both lists are loaded from JSON before any operation
-                            faction.loadDimensionBlacklistFromJson();
-                            faction.loadDimensionWhitelistFromJson();
                             
                             // Check for overlap with opposite type
                             if (chunk.isWhitelist) {
@@ -497,5 +554,143 @@ public class DimensionNetworkHandler {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Carve out unclaimed chunks from dimension regions, preserving only the parts
+     * that fall within the faction's claimed area.
+     * This cleans up stale data and also handles the claim-removal carving 
+     * (the carving in InteractionManager.onClaimRemove may fail to persist 
+     * when Faction.save() overwrites with stale data).
+     * @return true if any regions were modified
+     */
+    private static boolean cleanupStaleRegions(Faction faction, java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> list) {
+        if (list == null || list.isEmpty()) return false;
+        
+        java.util.List<io.icker.factions.api.persistents.Claim> claims = io.icker.factions.api.persistents.Claim.getByFaction(faction.getID());
+        java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> result = new java.util.ArrayList<>();
+        boolean changed = false;
+        
+        for (io.icker.factions.api.persistents.BlacklistedDimension dim : list) {
+            if (dim == null || dim.world == null || dim.world.isEmpty()) {
+                changed = true;
+                continue;
+            }
+            // Carve out unclaimed chunks from this region
+            java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> carved = carveUnclaimedChunks(dim, claims);
+            result.addAll(carved);
+            // If the carved result has fewer/smaller regions, we changed something
+            if (carved.size() == 1 && carved.get(0).minX == dim.minX && carved.get(0).maxX == dim.maxX
+                && carved.get(0).minY == dim.minY && carved.get(0).maxY == dim.maxY
+                && carved.get(0).minZ == dim.minZ && carved.get(0).maxZ == dim.maxZ) {
+                // No change
+            } else {
+                changed = true;
+            }
+        }
+        
+        if (changed) {
+            list.clear();
+            list.addAll(result);
+        }
+        return changed;
+    }
+    
+    /**
+     * Carve out all unclaimed chunks from a dimension region by splitting it into fragments
+     * that only cover claimed chunks. Uses box subtraction (same logic as InteractionManager).
+     */
+    private static java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> carveUnclaimedChunks(
+            io.icker.factions.api.persistents.BlacklistedDimension dim,
+            java.util.List<io.icker.factions.api.persistents.Claim> claims) {
+        java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> fragments = new java.util.ArrayList<>();
+        fragments.add(dim);
+        
+        // For each chunk this region covers (in the same world), check if it's claimed
+        int minChunkX = Math.floorDiv(dim.minX, 16);
+        int maxChunkX = Math.floorDiv(dim.maxX, 16);
+        int minChunkZ = Math.floorDiv(dim.minZ, 16);
+        int maxChunkZ = Math.floorDiv(dim.maxZ, 16);
+        
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                // Check if this chunk is claimed by this faction
+                boolean isClaimed = false;
+                for (io.icker.factions.api.persistents.Claim claim : claims) {
+                    if (claim.x == chunkX && claim.z == chunkZ && claim.level.equals(dim.world)) {
+                        isClaimed = true;
+                        break;
+                    }
+                }
+                if (isClaimed) continue; // Claimed chunk, keep it
+                
+                // Unclaimed chunk - carve it out of all current fragments
+                int claimMinX = chunkX * 16;
+                int claimMaxX = (chunkX + 1) * 16 - 1;
+                int claimMinZ = chunkZ * 16;
+                int claimMaxZ = (chunkZ + 1) * 16 - 1;
+                
+                java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> newFragments = new java.util.ArrayList<>();
+                for (io.icker.factions.api.persistents.BlacklistedDimension frag : fragments) {
+                    // Check overlap
+                    if (frag.world.equals(dim.world) && 
+                        frag.minX <= claimMaxX && frag.maxX >= claimMinX &&
+                        frag.minZ <= claimMaxZ && frag.maxZ >= claimMinZ) {
+                        // Overlaps - subtract this chunk
+                        newFragments.addAll(subtractChunkFromRegion(frag, claimMinX, claimMaxX, claimMinZ, claimMaxZ));
+                    } else {
+                        // No overlap, keep as-is
+                        newFragments.add(frag);
+                    }
+                }
+                fragments = newFragments;
+            }
+        }
+        
+        return fragments;
+    }
+    
+    /**
+     * Subtract a single claimed chunk from a region, splitting into up to 4 sub-regions.
+     * Same logic as InteractionManager.subtractBlacklistedClaim.
+     */
+    private static java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> subtractChunkFromRegion(
+            io.icker.factions.api.persistents.BlacklistedDimension dim,
+            int claimMinX, int claimMaxX, int claimMinZ, int claimMaxZ) {
+        java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> result = new java.util.ArrayList<>();
+        
+        // Left box
+        if (dim.minX < claimMinX) {
+            result.add(new io.icker.factions.api.persistents.BlacklistedDimension(
+                dim.world, dim.minX, dim.minY, dim.minZ,
+                claimMinX - 1, dim.maxY, dim.maxZ, dim.name
+            ));
+        }
+        // Right box
+        if (dim.maxX > claimMaxX) {
+            result.add(new io.icker.factions.api.persistents.BlacklistedDimension(
+                dim.world, claimMaxX + 1, dim.minY, dim.minZ,
+                dim.maxX, dim.maxY, dim.maxZ, dim.name
+            ));
+        }
+        // Front box (z: dim.minZ to claimMinZ-1, x clamped)
+        if (dim.minZ < claimMinZ) {
+            result.add(new io.icker.factions.api.persistents.BlacklistedDimension(
+                dim.world,
+                Math.max(dim.minX, claimMinX), dim.minY, dim.minZ,
+                Math.min(dim.maxX, claimMaxX), dim.maxY, claimMinZ - 1,
+                dim.name
+            ));
+        }
+        // Back box (z: claimMaxZ+1 to dim.maxZ, x clamped)
+        if (dim.maxZ > claimMaxZ) {
+            result.add(new io.icker.factions.api.persistents.BlacklistedDimension(
+                dim.world,
+                Math.max(dim.minX, claimMinX), dim.minY, claimMaxZ + 1,
+                Math.min(dim.maxX, claimMaxX), dim.maxY, dim.maxZ,
+                dim.name
+            ));
+        }
+        return result;
     }
 }
