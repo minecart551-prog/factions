@@ -43,7 +43,9 @@ public class DimensionBlacklistRenderer {
     private static final Color WHITELIST_WHITE = new Color(255, 255, 255);
     private static final Color DELETE_RED = new Color(255, 0, 0);
     private static final Color SELECTION_GREEN = new Color(0, 255, 0);
+    private static final Color SELECTION_WHITE = new Color(255, 255, 255);
     private static final int FILL_ALPHA = 45;
+    private static final int WIREFRAME_ALPHA = 200;
 
     private DimensionBlacklistRenderer() {}
 
@@ -127,9 +129,10 @@ public class DimensionBlacklistRenderer {
             }
         }
 
-        // Selection box
-        Color selectionColor = selectionMgr.isWhitelistMode() ? WHITELIST_WHITE : SELECTION_GREEN;
+        // Selection box with preview and wireframe
+        Color selectionColor = selectionMgr.isWhitelistMode() ? SELECTION_WHITE : SELECTION_GREEN;
         BlockPos firstPos = selectionMgr.getFirstPos();
+        BlockPos previewPos = selectionMgr.getPreviewPos();
         BlockPos secondPos = selectionMgr.getSecondPos();
         if (firstPos != null) {
             if (secondPos != null) {
@@ -140,15 +143,26 @@ public class DimensionBlacklistRenderer {
                 int maxY = Math.max(firstPos.getY(), secondPos.getY()) + 1;
                 int maxZ = Math.max(firstPos.getZ(), secondPos.getZ()) + 1;
                 renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, selectionColor, FILL_ALPHA);
+                renderWireframeBox(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, selectionColor, WIREFRAME_ALPHA);
+            } else if (previewPos != null) {
+                int minX = Math.min(firstPos.getX(), previewPos.getX());
+                int minY = Math.min(firstPos.getY(), previewPos.getY());
+                int minZ = Math.min(firstPos.getZ(), previewPos.getZ());
+                int maxX = Math.max(firstPos.getX(), previewPos.getX()) + 1;
+                int maxY = Math.max(firstPos.getY(), previewPos.getY()) + 1;
+                int maxZ = Math.max(firstPos.getZ(), previewPos.getZ()) + 1;
+                renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, selectionColor, FILL_ALPHA);
+                renderWireframeBox(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, selectionColor, WIREFRAME_ALPHA);
             } else {
                 int x = firstPos.getX();
                 int y = firstPos.getY();
                 int z = firstPos.getZ();
                 renderBoxAsFilledQuads(buildCtx, x, y, z, x + 1, y + 1, z + 1, selectionColor, FILL_ALPHA);
+                renderWireframeBox(buildCtx, x, y, z, x + 1, y + 1, z + 1, selectionColor, WIREFRAME_ALPHA);
             }
         }
 
-        // Delete mode box
+        // Delete mode box with wireframe
         if (selectionMgr.isDeleteMode()) {
             BlockPos delFirstPos = selectionMgr.getDeleteFirstPos();
             BlockPos delSecondPos = selectionMgr.getDeleteSecondPos();
@@ -161,11 +175,13 @@ public class DimensionBlacklistRenderer {
                     int maxY = Math.max(delFirstPos.getY(), delSecondPos.getY()) + 1;
                     int maxZ = Math.max(delFirstPos.getZ(), delSecondPos.getZ()) + 1;
                     renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, DELETE_RED, FILL_ALPHA);
+                    renderWireframeBox(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, DELETE_RED, WIREFRAME_ALPHA);
                 } else {
                     int x = delFirstPos.getX();
                     int y = delFirstPos.getY();
                     int z = delFirstPos.getZ();
                     renderBoxAsFilledQuads(buildCtx, x, y, z, x + 1, y + 1, z + 1, DELETE_RED, FILL_ALPHA);
+                    renderWireframeBox(buildCtx, x, y, z, x + 1, y + 1, z + 1, DELETE_RED, WIREFRAME_ALPHA);
                 }
             }
         }
@@ -215,6 +231,26 @@ public class DimensionBlacklistRenderer {
             ctx.drawFilledQuad(minX, minY, minZ, minX, minY, maxZ, minX, maxY, maxZ, minX, maxY, minZ, color, alpha);
             ctx.drawFilledQuad(maxX, minY, minZ, maxX, maxY, minZ, maxX, maxY, maxZ, maxX, minY, maxZ, color, alpha);
         }
+    }
+
+    private void renderWireframeBox(FactionsRenderingContext ctx,
+                                     double minX, double minY, double minZ,
+                                     double maxX, double maxY, double maxZ,
+                                     Color color, int alpha) {
+        ctx.drawLine(minX, minY, minZ, maxX, minY, minZ, color, alpha);
+        ctx.drawLine(maxX, minY, minZ, maxX, minY, maxZ, color, alpha);
+        ctx.drawLine(maxX, minY, maxZ, minX, minY, maxZ, color, alpha);
+        ctx.drawLine(minX, minY, maxZ, minX, minY, minZ, color, alpha);
+
+        ctx.drawLine(minX, maxY, minZ, maxX, maxY, minZ, color, alpha);
+        ctx.drawLine(maxX, maxY, minZ, maxX, maxY, maxZ, color, alpha);
+        ctx.drawLine(maxX, maxY, maxZ, minX, maxY, maxZ, color, alpha);
+        ctx.drawLine(minX, maxY, maxZ, minX, maxY, minZ, color, alpha);
+
+        ctx.drawLine(minX, minY, minZ, minX, maxY, minZ, color, alpha);
+        ctx.drawLine(maxX, minY, minZ, maxX, maxY, minZ, color, alpha);
+        ctx.drawLine(maxX, minY, maxZ, maxX, maxY, maxZ, color, alpha);
+        ctx.drawLine(minX, minY, maxZ, minX, maxY, maxZ, color, alpha);
     }
 
     public void render(double camX, double camY, double camZ, MatrixStack matrices) {

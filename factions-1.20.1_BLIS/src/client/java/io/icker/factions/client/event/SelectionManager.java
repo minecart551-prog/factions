@@ -16,6 +16,7 @@ public class SelectionManager {
 
     private BlockPos firstPos = null;
     private BlockPos secondPos = null;
+    private BlockPos previewPos = null;
     
     // Separate lists for blacklist and whitelist
     private List<BlacklistedDimension> blacklistSelections = new ArrayList<>();
@@ -42,6 +43,7 @@ public class SelectionManager {
     public void setFirstPos(BlockPos pos, String world) {
         this.firstPos = pos;
         this.secondPos = null;
+        this.previewPos = null;
         this.currentWorld = world;
         this.deleteMode = false;
     }
@@ -69,12 +71,14 @@ public class SelectionManager {
             
             this.firstPos = null;
             this.secondPos = null;
+            this.previewPos = null;
         }
     }
 
     public void clearSelection() {
         this.firstPos = null;
         this.secondPos = null;
+        this.previewPos = null;
         this.currentWorld = null;
         this.deleteMode = false;
         this.deleteFirstPos = null;
@@ -185,6 +189,8 @@ public class SelectionManager {
 
     public BlockPos getFirstPos() { return this.firstPos; }
     public BlockPos getSecondPos() { return this.secondPos; }
+    public BlockPos getPreviewPos() { return this.previewPos; }
+    public void setPreviewPos(BlockPos pos) { this.previewPos = pos; }
     public BlockPos getDeleteFirstPos() { return this.deleteFirstPos; }
     public BlockPos getDeleteSecondPos() { return this.deleteSecondPos; }
     public boolean isDeleteMode() { return this.deleteMode; }
