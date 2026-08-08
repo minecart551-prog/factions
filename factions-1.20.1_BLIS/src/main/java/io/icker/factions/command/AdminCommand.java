@@ -1,6 +1,7 @@
 package io.icker.factions.command;
 
 import com.mojang.authlib.GameProfile;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -298,8 +299,13 @@ public class AdminCommand implements Command {
 
         // Wealth settings
         new Message(Formatting.YELLOW + "Wealth Settings:").send(player, false);
-        new Message(Formatting.GRAY + "  Max Value: " + Formatting.WHITE + FactionsMod.CONFIG.POWER.WEALTH.MAX_VALUE).send(player, false);
-        new Message(Formatting.GRAY + "  Decay Per Day: " + Formatting.WHITE + FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY).send(player, false);
+        new Message(Formatting.GRAY + "  Wealth Decay Per Day: " + Formatting.WHITE + FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY).send(player, false);
+        new Message(Formatting.GRAY + "  Wealth Decay Divisor: " + Formatting.WHITE + FactionsMod.CONFIG.POWER.WEALTH.DECAY_DIVISOR).send(player, false);
+
+        // Bank settings
+        new Message(Formatting.YELLOW + "Bank Settings:").send(player, false);
+        new Message(Formatting.GRAY + "  Enabled: " + Formatting.WHITE + FactionsMod.CONFIG.BANK.ENABLED).send(player, false);
+        new Message(Formatting.GRAY + "  Max Balance: " + Formatting.WHITE + FactionsMod.CONFIG.BANK.MAX_BALANCE).send(player, false);
 
         // War settings
         new Message(Formatting.YELLOW + "War Settings:").send(player, false);
@@ -507,17 +513,32 @@ public class AdminCommand implements Command {
     }
 
     // Wealth
-    private int setWealthMaxValue(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        int value = IntegerArgumentType.getInteger(context, "value");
-        FactionsMod.CONFIG.POWER.WEALTH.MAX_VALUE = value;
-        sendConfigUpdate(context.getSource().getPlayerOrThrow(), "power.wealth.maxValue", value);
-        return 1;
-    }
-
     private int setWealthDecayPerDay(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         int value = IntegerArgumentType.getInteger(context, "value");
         FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY = value;
         sendConfigUpdate(context.getSource().getPlayerOrThrow(), "power.wealth.decayPerDay", value);
+        return 1;
+    }
+
+    private int setWealthDecayDivisor(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        double value = DoubleArgumentType.getDouble(context, "value");
+        FactionsMod.CONFIG.POWER.WEALTH.DECAY_DIVISOR = value;
+        sendConfigUpdate(context.getSource().getPlayerOrThrow(), "power.wealth.decayDivisor", value);
+        return 1;
+    }
+
+    // Bank
+    private int setBankEnabled(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        boolean value = BoolArgumentType.getBool(context, "value");
+        FactionsMod.CONFIG.BANK.ENABLED = value;
+        sendConfigUpdate(context.getSource().getPlayerOrThrow(), "bank.enabled", value);
+        return 1;
+    }
+
+    private int setBankMaxBalance(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        int value = IntegerArgumentType.getInteger(context, "value");
+        FactionsMod.CONFIG.BANK.MAX_BALANCE = value;
+        sendConfigUpdate(context.getSource().getPlayerOrThrow(), "bank.maxBalance", value);
         return 1;
     }
 
@@ -948,12 +969,19 @@ public class AdminCommand implements Command {
                                                         .then(CommandManager.argument("value", IntegerArgumentType.integer(0))
                                                                 .executes(this::setPowerTicksReward))))
                                         .then(CommandManager.literal("wealth")
-                                                .then(CommandManager.literal("maxValue")
-                                                        .then(CommandManager.argument("value", IntegerArgumentType.integer(0))
-                                                                .executes(this::setWealthMaxValue)))
                                                 .then(CommandManager.literal("decayPerDay")
                                                         .then(CommandManager.argument("value", IntegerArgumentType.integer(0))
-                                                                .executes(this::setWealthDecayPerDay))))
+                                                                .executes(this::setWealthDecayPerDay)))
+                                                .then(CommandManager.literal("decayDivisor")
+                                                        .then(CommandManager.argument("value", DoubleArgumentType.doubleArg(0))
+                                                                .executes(this::setWealthDecayDivisor))))
+                                        .then(CommandManager.literal("bank")
+                                                .then(CommandManager.literal("enabled")
+                                                        .then(CommandManager.argument("value", BoolArgumentType.bool())
+                                                                .executes(this::setBankEnabled)))
+                                                .then(CommandManager.literal("maxBalance")
+                                                        .then(CommandManager.argument("value", IntegerArgumentType.integer(-1))
+                                                                .executes(this::setBankMaxBalance))))
                                         .then(CommandManager.literal("war")
                                                 .then(CommandManager.literal("maxValue")
                                                         .then(CommandManager.argument("value", IntegerArgumentType.integer(0))

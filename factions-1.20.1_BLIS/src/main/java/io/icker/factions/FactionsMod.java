@@ -30,6 +30,8 @@ import io.icker.factions.command.PermissionCommand;
 import io.icker.factions.command.RankCommand;
 import io.icker.factions.command.SafeCommand;
 import io.icker.factions.command.SacrificeCommand;
+import io.icker.factions.command.WealthCommand;
+import io.icker.factions.command.BankCommand;
 import io.icker.factions.command.SettingsCommand;
 import io.icker.factions.command.VassalCommand;
 import io.icker.factions.config.Config;
@@ -105,7 +107,7 @@ public class FactionsMod implements ModInitializer {
                 new GodsCommand(), new HomeCommand(), new InfoCommand(), new InviteCommand(), new JoinCommand(),
                 new KickCommand(), new LeaveCommand(), new ListCommand(), new MapCommand(),
                 new MemberCommand(), new ModifyCommand(), new RankCommand(), new SafeCommand(),
-                new SacrificeCommand(), new PermissionCommand(), new VassalCommand(), new BlockCommand(), new DimensionCommand()};
+                new SacrificeCommand(), new WealthCommand(), new BankCommand(), new PermissionCommand(), new VassalCommand(), new BlockCommand(), new DimensionCommand()};
 
         for (Command command : commands) {
             factions.addChild(command.getNode());

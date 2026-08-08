@@ -31,6 +31,7 @@ public class Config {
                 .registerTypeAdapter(SafeConfig.class, new Deserializer<>(SafeConfig.class))
                 .registerTypeAdapter(VassalConfig.class, new Deserializer<>(VassalConfig.class))
                 .registerTypeAdapter(GodsConfig.class, new Deserializer<>(GodsConfig.class))
+                .registerTypeAdapter(BankConfig.class, new Deserializer<>(BankConfig.class))
                 .registerTypeAdapter(FilterListConfig.class, new Deserializer<>(FilterListConfig.class))
                 .create();
 
@@ -78,6 +79,10 @@ public class Config {
                 config.GODS = defaults.GODS;
             }
 
+            if (config.BANK == null) {
+                config.BANK = defaults.BANK;
+            }
+
             if (config.BLUEMAP == null) {
                 config.BLUEMAP = defaults.BLUEMAP;
             }
@@ -115,6 +120,7 @@ public class Config {
                     .registerTypeAdapter(SafeConfig.class, new Deserializer<>(SafeConfig.class))
                     .registerTypeAdapter(VassalConfig.class, new Deserializer<>(VassalConfig.class))
                     .registerTypeAdapter(GodsConfig.class, new Deserializer<>(GodsConfig.class))
+                    .registerTypeAdapter(BankConfig.class, new Deserializer<>(BankConfig.class))
                     .create();
 
             FileWriter writer = new FileWriter(file);
@@ -161,6 +167,9 @@ public class Config {
 
     @SerializedName("gods")
     public GodsConfig GODS = new GodsConfig();
+
+    @SerializedName("bank")
+    public BankConfig BANK = new BankConfig();
 
     @SerializedName("bluemap")
     public BlueMapConfig BLUEMAP = new BlueMapConfig();

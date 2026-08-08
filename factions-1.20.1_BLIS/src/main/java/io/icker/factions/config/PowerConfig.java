@@ -120,17 +120,17 @@ public class PowerConfig {
     }
 
     public static class WealthPower {
-        @SerializedName("_comment_maxValue")
-        public String _COMMENT_MAX_VALUE = "Maximum wealth power a faction can accumulate";
-
-        @SerializedName("maxValue")
-        public int MAX_VALUE = 100;
-
         @SerializedName("_comment_decayPerDay")
-        public String _COMMENT_DECAY_PER_DAY = "Wealth power lost per real day since last sacrifice";
+        public String _COMMENT_DECAY_PER_DAY = "Base wealth power lost per real day since last sacrifice";
 
         @SerializedName("decayPerDay")
         public int DECAY_PER_DAY = 5;
+
+        @SerializedName("_comment_decayDivisor")
+        public String _COMMENT_DECAY_DIVISOR = "Scaling factor: effective decay = decayPerDay + (wealthPower / decayDivisor). Higher divisor = slower scaling. Set to 0 to disable scaling.";
+
+        @SerializedName("decayDivisor")
+        public double DECAY_DIVISOR = 10;
 
         @SerializedName("_comment_items")
         public String _COMMENT_ITEMS = "Items that can be sacrificed and their power value";

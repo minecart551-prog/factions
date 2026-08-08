@@ -56,11 +56,11 @@ public class SacrificeCommand implements Command {
         int stackSize = heldItem.getCount();
         int totalValue = matchedItem.VALUE * stackSize;
 
-        // Add wealth power to faction
-        int actualAdded = faction.addWealthPower(totalValue);
+        // Deposit to faction bank
+        int actualAdded = faction.depositToBank(totalValue);
 
         if (actualAdded == 0) {
-            new Message("Faction wealth power is already at maximum").fail().send(player, false);
+            new Message("Faction bank is full").fail().send(player, false);
             return 0;
         }
 
@@ -68,13 +68,10 @@ public class SacrificeCommand implements Command {
         int itemsConsumed = (int) Math.ceil((double) actualAdded / matchedItem.VALUE);
         heldItem.decrement(itemsConsumed);
 
-        new Message("%s sacrificed %d %s for %d wealth power (now at %d/%d)",
+        new Message("%s deposited $%d to faction bank (bank: $%d)",
                 player.getName().getString(),
                 itemsConsumed,
-                itemIdString,
-                actualAdded,
-                faction.getWealthPower(),
-                FactionsMod.CONFIG.POWER.WEALTH.MAX_VALUE).send(faction);
+                faction.getBankBalance()).send(faction);
 
         return 1;
     }

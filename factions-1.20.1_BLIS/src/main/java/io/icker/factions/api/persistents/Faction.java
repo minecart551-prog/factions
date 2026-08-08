@@ -26,6 +26,7 @@ public class Faction {
             Database.load(Faction.class, Faction::getID);
     
     // Post-load migration: migrate old DimensionBlacklist to JSON format
+    // Also migrate excess wealth power to bank balance
     static {
         for (Faction faction : STORE.values()) {
             if (!faction.dimensionBlacklistOld.isEmpty()) {
@@ -34,6 +35,25 @@ public class Faction {
                 faction.dimensionBlacklistOld.clear();
             } else if (!faction.dimensionBlacklistJson.isEmpty()) {
                 faction.loadDimensionBlacklistFromJson();
+            }
+
+            // Bank migration: excess wealth power → bank balance (one-time only)
+            if (!faction.bankMigrationDone) {
+                faction.bankMigrationDone = true;
+                List<Claim> claims = Claim.getByFaction(faction.id);
+                int requiredPower = claims.size() * FactionsMod.CONFIG.POWER.CLAIM_WEIGHT;
+                int basePowerMax = FactionsMod.CONFIG.POWER.BASE
+                        + faction.getMemberPower()
+                        + (faction.getMutualAllies().size() * FactionsMod.CONFIG.POWER.POWER_PER_ALLY);
+                int otherPowers = Math.min(faction.power, basePowerMax)
+                        + faction.adminPower + faction.getWarPower()
+                        + faction.getFamePower() + faction.getVassalPowerBonus();
+                int targetWealth = Math.max(0, requiredPower - otherPowers);
+                int currentWealth = faction.wealthPower;
+                if (currentWealth > targetWealth) {
+                    faction.bankBalance = currentWealth - targetWealth;
+                    faction.wealthPower = targetWealth;
+                }
             }
         }
     }
@@ -67,6 +87,12 @@ public class Faction {
 
     @Field("LastSacrifice")
     private long lastSacrifice;
+
+    @Field("BankBalance")
+    private int bankBalance;
+
+    @Field("BankMigrationDone")
+    private boolean bankMigrationDone;
 
     @Field("WarPower")
     private int warPower;
@@ -245,17 +271,18 @@ public class Faction {
         if (wealthPower == 0) return 0;
         long now = System.currentTimeMillis();
         long daysSinceLastSacrifice = (now - lastSacrifice) / (1000L * 60 * 60 * 24);
-        int decay = (int) (daysSinceLastSacrifice * FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY);
+        int baseDecay = FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY;
+        double divisor = FactionsMod.CONFIG.POWER.WEALTH.DECAY_DIVISOR;
+        int scaledDecay = divisor > 0 ? baseDecay + (int)(wealthPower / divisor) : baseDecay;
+        int decay = (int) (daysSinceLastSacrifice * scaledDecay);
         return Math.max(0, wealthPower - decay);
     }
 
     public int addWealthPower(int amount) {
-        int maxValue = FactionsMod.CONFIG.POWER.WEALTH.MAX_VALUE;
         int currentPower = getWealthPower();
-        int newPower = Math.min(currentPower + amount, maxValue);
-        wealthPower = newPower;
+        wealthPower = currentPower + amount;
         lastSacrifice = System.currentTimeMillis();
-        return newPower - currentPower;
+        return amount;
     }
 
     public long getDaysSinceLastSacrifice() {
@@ -506,7 +533,7 @@ public class Faction {
     public void fillBasePower() { power = getBasePowerMax(); }
 
     public int calculateMaxPower() {
-        return getBasePowerMax() + adminPower + FactionsMod.CONFIG.POWER.WEALTH.MAX_VALUE + FactionsMod.CONFIG.POWER.WAR.MAX_VALUE + FactionsMod.CONFIG.POWER.FAME.MAX_VALUE + getVassalPowerBonus();
+        return getBasePowerMax() + adminPower + FactionsMod.CONFIG.POWER.WAR.MAX_VALUE + FactionsMod.CONFIG.POWER.FAME.MAX_VALUE + getVassalPowerBonus();
     }
 
     public Collection<User> getRelationships() { throw new UnsupportedOperationException("Unimplemented method 'getRelationships'"); }
@@ -541,6 +568,41 @@ public class Faction {
         if (currentPower < amount) return false;
         wealthPower = currentPower - amount;
         return true;
+    }
+
+    public int getBankBalance() { return bankBalance; }
+
+    public int depositToBank(int amount) {
+        int maxBalance = FactionsMod.CONFIG.BANK.MAX_BALANCE;
+        int added = maxBalance < 0 ? amount : Math.min(amount, maxBalance - bankBalance);
+        if (added <= 0) return 0;
+        bankBalance += added;
+        return added;
+    }
+
+    public int withdrawFromBank(int amount) {
+        int withdrawn = Math.min(amount, bankBalance);
+        bankBalance -= withdrawn;
+        return withdrawn;
+    }
+
+    public int getTargetWealthPower() {
+        List<Claim> claims = getClaims();
+        int requiredPower = claims.size() * FactionsMod.CONFIG.POWER.CLAIM_WEIGHT;
+        int otherPowers = getPower() - getWealthPower();
+        return Math.max(0, requiredPower - otherPowers);
+    }
+
+    public void maintainWealthFromBank() {
+        if (!FactionsMod.CONFIG.BANK.ENABLED) return;
+        if (bankBalance <= 0) return;
+        int target = getTargetWealthPower();
+        int current = getWealthPower();
+        if (current < target) {
+            int needed = target - current;
+            int spent = withdrawFromBank(needed);
+            addWealthPower(spent);
+        }
     }
     
     public void loadDimensionBlacklistFromJson() {

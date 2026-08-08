@@ -165,9 +165,21 @@ public class InfoCommand implements Command {
                 .append(Text.literal(faction.getMemberPower() + " / " + maxMemberPower).formatted(Formatting.GREEN))
                 .append("\n");
         powerHover.append(Text.literal("Wealth: ").formatted(Formatting.GOLD))
-                .append(Text.literal(faction.getWealthPower() + " / " + FactionsMod.CONFIG.POWER.WEALTH.MAX_VALUE).formatted(Formatting.YELLOW))
+                .append(Text.literal(String.valueOf(faction.getWealthPower())).formatted(Formatting.YELLOW))
                 .append(Text.literal(" (last sacrifice: " + sacrificeInfo + ")").formatted(Formatting.GRAY))
                 .append("\n");
+        double wealthDecayDivisor = FactionsMod.CONFIG.POWER.WEALTH.DECAY_DIVISOR;
+        int effectiveWealthDecay = wealthDecayDivisor > 0
+                ? FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY + (int)(faction.getWealthPower() / wealthDecayDivisor)
+                : FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY;
+        powerHover.append(Text.literal("  Decay Rate: ").formatted(Formatting.GRAY))
+                .append(Text.literal(effectiveWealthDecay + "/day").formatted(Formatting.RED))
+                .append("\n");
+        if (FactionsMod.CONFIG.BANK.ENABLED) {
+            powerHover.append(Text.literal("  Bank: $").formatted(Formatting.GOLD))
+                    .append(Text.literal(String.valueOf(faction.getBankBalance())).formatted(Formatting.GREEN))
+                    .append("\n");
+        }
         powerHover.append(Text.literal("War: ").formatted(Formatting.GOLD))
                 .append(Text.literal(faction.getWarPower() + " / " + FactionsMod.CONFIG.POWER.WAR.MAX_VALUE).formatted(Formatting.RED))
                 .append(Text.literal(" (last kill: " + warKillInfo + ")").formatted(Formatting.GRAY))
