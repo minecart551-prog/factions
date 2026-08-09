@@ -268,14 +268,28 @@ public class Faction {
     public void setAdminProtected(boolean adminProtected) { this.adminProtected = adminProtected; }
 
     public int getWealthPower() {
-        if (wealthPower == 0) return 0;
+        // Calculate what decay WOULD be
         long now = System.currentTimeMillis();
         long daysSinceLastSacrifice = (now - lastSacrifice) / (1000L * 60 * 60 * 24);
         int baseDecay = FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY;
         double divisor = FactionsMod.CONFIG.POWER.WEALTH.DECAY_DIVISOR;
         int scaledDecay = divisor > 0 ? baseDecay + (int)(wealthPower / divisor) : baseDecay;
         int decay = (int) (daysSinceLastSacrifice * scaledDecay);
-        return Math.max(0, wealthPower - decay);
+
+        if (decay <= 0) return wealthPower;
+
+        // Bank covers the decay — wealth stays the same
+        if (bankBalance >= decay) {
+            withdrawFromBank(decay);
+            lastSacrifice = now;
+            return wealthPower;
+        }
+
+        // Bank can only partially cover — deduct what bank can, rest decays
+        int covered = bankBalance;
+        withdrawFromBank(covered);
+        lastSacrifice = now;
+        return Math.max(0, wealthPower - (decay - covered));
     }
 
     public int addWealthPower(int amount) {
@@ -593,17 +607,7 @@ public class Faction {
         return Math.max(0, requiredPower - otherPowers);
     }
 
-    public void maintainWealthFromBank() {
-        if (!FactionsMod.CONFIG.BANK.ENABLED) return;
-        if (bankBalance <= 0) return;
-        int target = getTargetWealthPower();
-        int current = getWealthPower();
-        if (current < target) {
-            int needed = target - current;
-            int spent = withdrawFromBank(needed);
-            addWealthPower(spent);
-        }
-    }
+
     
     public void loadDimensionBlacklistFromJson() {
         try {

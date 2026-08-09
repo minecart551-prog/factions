@@ -32,8 +32,6 @@ import net.minecraft.util.math.ChunkPos;
 public class FactionsManager {
     public static PlayerManager playerManager;
     private static int decayCheckCounter = 0;
-    private static int bankMaintenanceCounter = 0;
-    private static final int BANK_MAINTENANCE_TICKS = 1_728_000; // 24 hours
 
     public static void register() {
         ServerLifecycleEvents.SERVER_STARTED.register(FactionsManager::serverStarted);
@@ -77,12 +75,6 @@ public class FactionsManager {
             decayCheckCounter = 0;
             checkAllFactionsForDecay();
         }
-
-        bankMaintenanceCounter++;
-        if (bankMaintenanceCounter >= BANK_MAINTENANCE_TICKS) {
-            bankMaintenanceCounter = 0;
-            runBankMaintenance();
-        }
     }
 
     private static void factionModified(Faction faction) {
@@ -125,12 +117,6 @@ public class FactionsManager {
                 new Message("Lost %d claim(s) due to insufficient power!", decayedClaims.size())
                         .fail().send(faction);
             }
-        }
-    }
-
-    private static void runBankMaintenance() {
-        for (Faction faction : Faction.all()) {
-            faction.maintainWealthFromBank();
         }
     }
 
