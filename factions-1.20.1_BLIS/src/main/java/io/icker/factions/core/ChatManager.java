@@ -42,16 +42,12 @@ public class ChatManager {
     }
 
     private static Text global(ServerPlayerEntity sender, String message) {
-        return new Message(message).format(Formatting.GRAY)
+        return new Message(message).format(Formatting.WHITE)
                 .raw();
     }
 
     private static Text inFactionGlobal(ServerPlayerEntity sender, Faction faction, String message) {
-        return new Message("")
-                .add(new Message(faction.getName()).format(Formatting.BOLD, faction.getColor()))
-                .filler("»")
-                .add(new Message(message).format(Formatting.GRAY))
-                .raw();
+        return new Message(message).format(Formatting.WHITE).raw();
     }
 
     private static Text faction(ServerPlayerEntity sender, Faction faction, String message) {
