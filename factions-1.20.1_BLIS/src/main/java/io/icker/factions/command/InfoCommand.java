@@ -169,9 +169,11 @@ public class InfoCommand implements Command {
                 .append(Text.literal(" (last sacrifice: " + sacrificeInfo + ")").formatted(Formatting.GRAY))
                 .append("\n");
         double wealthDecayDivisor = FactionsMod.CONFIG.POWER.WEALTH.DECAY_DIVISOR;
-        int effectiveWealthDecay = wealthDecayDivisor > 0
-                ? FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY + (int)(faction.getWealthPower() / wealthDecayDivisor)
-                : FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY;
+        int wealthPower = faction.getWealthPower();
+        int effectiveWealthDecay = wealthPower <= 0 ? 0
+                : (wealthDecayDivisor > 0
+                        ? FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY + (int)(wealthPower / wealthDecayDivisor)
+                        : FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY);
         powerHover.append(Text.literal("  Decay Rate: ").formatted(Formatting.GRAY))
                 .append(Text.literal(effectiveWealthDecay + "/day").formatted(Formatting.RED))
                 .append("\n");

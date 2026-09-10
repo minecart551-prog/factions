@@ -64,6 +64,8 @@ public class SacrificeCommand implements Command {
             return 0;
         }
 
+        faction.setLastSacrifice(System.currentTimeMillis());
+
         // Consume the items
         int itemsConsumed = (int) Math.ceil((double) actualAdded / matchedItem.VALUE);
         heldItem.decrement(itemsConsumed);

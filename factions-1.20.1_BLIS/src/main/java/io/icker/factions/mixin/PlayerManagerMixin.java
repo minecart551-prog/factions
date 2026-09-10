@@ -1,6 +1,7 @@
 package io.icker.factions.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
@@ -11,6 +12,7 @@ import io.icker.factions.util.StyledChatCompatibility;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.message.MessageType;
 import net.minecraft.network.message.SentMessage;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.PlayerManager;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.HoverEvent;
@@ -20,6 +22,9 @@ import net.minecraft.util.Formatting;
 
 @Mixin(PlayerManager.class)
 public class PlayerManagerMixin {
+    @Shadow
+    private MinecraftServer server;
+
     @Redirect(
             method = "broadcast(Lnet/minecraft/network/message/SignedMessage;Ljava/util/function/Predicate;Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/minecraft/network/message/MessageType$Parameters;)V",
             at = @At(value = "INVOKE",
@@ -59,7 +64,8 @@ public class PlayerManagerMixin {
         if (sender.isInFaction() && sender.chat == User.ChatMode.GLOBAL
                 && FactionsMod.CONFIG.DISPLAY.MODIFY_CHAT) {
             Faction faction = sender.getFaction();
-            String name = player.getDisplayName().getString();
+            ServerPlayerEntity senderPlayer = server.getPlayerManager().getPlayer(sender.getID());
+            String name = senderPlayer != null ? senderPlayer.getDisplayName().getString() : "Unknown";
 
             Text hoverText = Text.empty()
                     .append(Text.literal("Faction: ").formatted(Formatting.GRAY))

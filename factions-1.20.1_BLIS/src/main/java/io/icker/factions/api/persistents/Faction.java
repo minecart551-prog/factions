@@ -88,6 +88,9 @@ public class Faction {
     @Field("LastSacrifice")
     private long lastSacrifice;
 
+    @Field("LastDecaySettlement")
+    private long lastDecaySettlement;
+
     @Field("BankBalance")
     private int bankBalance;
 
@@ -268,34 +271,38 @@ public class Faction {
     public void setAdminProtected(boolean adminProtected) { this.adminProtected = adminProtected; }
 
     public int getWealthPower() {
-        // Calculate what decay WOULD be
+        if (wealthPower <= 0) return 0;
+
         long now = System.currentTimeMillis();
-        long daysSinceLastSacrifice = (now - lastSacrifice) / (1000L * 60 * 60 * 24);
+        long reference = lastDecaySettlement;
+        if (reference <= 0) reference = lastSacrifice;
+        if (reference <= 0) reference = now;
+
+        long daysSince = (now - reference) / (1000L * 60 * 60 * 24);
         int baseDecay = FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY;
         double divisor = FactionsMod.CONFIG.POWER.WEALTH.DECAY_DIVISOR;
         int scaledDecay = divisor > 0 ? baseDecay + (int)(wealthPower / divisor) : baseDecay;
-        int decay = (int) (daysSinceLastSacrifice * scaledDecay);
+        int decay = (int)(daysSince * scaledDecay);
 
         if (decay <= 0) return wealthPower;
 
-        // Bank covers the decay — wealth stays the same
         if (bankBalance >= decay) {
             withdrawFromBank(decay);
-            lastSacrifice = now;
+            lastDecaySettlement = now;
             return wealthPower;
         }
 
-        // Bank can only partially cover — deduct what bank can, rest decays
-        int covered = bankBalance;
+        int covered = Math.min(decay, Math.max(0, bankBalance));
         withdrawFromBank(covered);
-        lastSacrifice = now;
-        return Math.max(0, wealthPower - (decay - covered));
+        wealthPower = Math.max(0, wealthPower - (decay - covered));
+        lastDecaySettlement = now;
+        return wealthPower;
     }
 
     public int addWealthPower(int amount) {
         int currentPower = getWealthPower();
         wealthPower = currentPower + amount;
-        lastSacrifice = System.currentTimeMillis();
+        lastDecaySettlement = System.currentTimeMillis();
         return amount;
     }
 
@@ -554,6 +561,7 @@ public class Faction {
 
     public long getLastPrayer() { return lastPrayer; }
     public void setLastPrayer(long timestamp) { this.lastPrayer = timestamp; }
+    public void setLastSacrifice(long timestamp) { this.lastSacrifice = timestamp; }
 
     public List<ActiveBlessing> getActiveBlessings() {
         List<ActiveBlessing> blessings;
