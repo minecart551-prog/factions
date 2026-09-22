@@ -27,6 +27,7 @@ public class FactionsClientMod implements ClientModInitializer {
             DimensionBlacklistItemHandler.register();
             io.icker.factions.client.network.DimensionClientSyncHandler.register();
             io.icker.factions.client.network.UserClientSyncHandler.register();
+            io.icker.factions.client.network.DimensionFileClientHandler.register();
             LOGGER.info("Client mod initialized!");
             sendChatMessage("§6[FactionsClient]§r Client mod initialized!");
         } catch (Exception e) {

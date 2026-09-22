@@ -17,6 +17,7 @@ import net.minecraft.item.Item;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
@@ -32,11 +33,18 @@ public class DimensionNetworkHandler {
     public static final Identifier SYNC_REQUEST_PACKET_ID = new Identifier("factions", "dimension_sync_request");
     public static final Identifier USER_SYNC_REQUEST_PACKET_ID = new Identifier("factions", "user_sync_request");
     public static final Identifier USER_SYNC_PACKET_ID = new Identifier("factions", "user_sync");
+    public static final Identifier EXPORT_PACKET_ID = new Identifier("factions", "dimension_export");
+    public static final Identifier IMPORT_REQUEST_PACKET_ID = new Identifier("factions", "dimension_import_request");
+    public static final Identifier IMPORT_PACKET_ID = new Identifier("factions", "dimension_import");
 
     // Accumulates commit chunks per player: sessionId -> {totalChunks, dimensions, receivedChunkIndices}
     private static final java.util.Map<java.util.UUID, ChunkedCommit> pendingCommitChunks =
         new java.util.HashMap<>();
-    
+
+    // Accumulates import upload chunks: sessionId -> {totalChunks, data, receivedChunkIndices}
+    private static final java.util.Map<java.util.UUID, FileChunkAssembly> pendingImportChunks =
+        new java.util.HashMap<>();
+
     private static class ChunkedCommit {
         int totalChunks;
         java.util.List<BlacklistedDimension> dimensions = new java.util.ArrayList<>();
@@ -44,6 +52,27 @@ public class DimensionNetworkHandler {
         ChunkedCommit(int totalChunks) { 
             this.totalChunks = totalChunks; 
             this.receivedChunks = new java.util.BitSet(totalChunks);
+        }
+    }
+
+    private static class FileChunkAssembly {
+        final int totalChunks;
+        final java.util.Map<Integer, byte[]> parts = new java.util.HashMap<>();
+        final java.util.BitSet receivedChunks;
+        FileChunkAssembly(int totalChunks) {
+            this.totalChunks = totalChunks;
+            this.receivedChunks = new java.util.BitSet(totalChunks);
+        }
+        boolean isComplete() {
+            return receivedChunks.cardinality() == totalChunks;
+        }
+        byte[] assemble() {
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            for (int i = 0; i < totalChunks; i++) {
+                byte[] part = parts.get(i);
+                if (part != null) baos.writeBytes(part);
+            }
+            return baos.toByteArray();
         }
     }
 
@@ -60,8 +89,6 @@ public class DimensionNetworkHandler {
                 handleCommitChunkPacket(server, player, buf);
             });
         
-        pendingCommitChunks.clear(); // Reset on server start
-        
         // Register the server-side packet receiver for client→server sync requests
         ServerPlayNetworking.registerGlobalReceiver(SYNC_REQUEST_PACKET_ID,
             (server, player, handler, buf, responseSender) -> {
@@ -73,7 +100,16 @@ public class DimensionNetworkHandler {
             (server, player, handler, buf, responseSender) -> {
                 handleUserSyncRequestPacket(server, player);
             });
-        
+
+        // Register the server-side packet receiver for client→server import uploads
+        ServerPlayNetworking.registerGlobalReceiver(IMPORT_PACKET_ID,
+            (server, player, handler, buf, responseSender) -> {
+                handleImportPacket(server, player, buf);
+            });
+
+        pendingCommitChunks.clear(); // Reset on server start
+        pendingImportChunks.clear();
+
         // Prevent block breaking when holding dimension tools
         AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
             Item item = player.getStackInHand(hand).getItem();
@@ -464,6 +500,148 @@ public class DimensionNetworkHandler {
     }
 
     /**
+     * Handle chunked import upload from client. Reassembles gzip payload,
+     * parses the export JSON, and merges regions into the faction.
+     */
+    private static void handleImportPacket(net.minecraft.server.MinecraftServer server, ServerPlayerEntity player,
+                                           PacketByteBuf buf) {
+        try {
+            byte[] nbtBytes = new byte[buf.readableBytes()];
+            buf.readBytes(nbtBytes);
+
+            server.execute(() -> {
+                try {
+                    DataInputStream dis = new DataInputStream(new ByteArrayInputStream(nbtBytes));
+                    net.minecraft.nbt.NbtCompound nbtCompound = NbtIo.read(dis);
+                    if (nbtCompound == null) return;
+
+                    DimensionFilePacket chunk = DimensionFilePacket.fromNbt(nbtCompound);
+                    if (chunk.sessionId == null || chunk.totalChunks < 1
+                            || chunk.totalChunks > DimensionFilePacket.MAX_CHUNKS
+                            || chunk.chunkIndex < 0 || chunk.chunkIndex >= chunk.totalChunks) {
+                        player.sendMessage(Text.literal("§cInvalid import packet"), false);
+                        return;
+                    }
+
+                    FileChunkAssembly assembly = pendingImportChunks.get(chunk.sessionId);
+                    if (assembly == null) {
+                        if (pendingImportChunks.size() >= 32) pendingImportChunks.clear();
+                        assembly = new FileChunkAssembly(chunk.totalChunks);
+                        pendingImportChunks.put(chunk.sessionId, assembly);
+                    }
+                    if (assembly.totalChunks != chunk.totalChunks) {
+                        pendingImportChunks.remove(chunk.sessionId);
+                        return;
+                    }
+                    assembly.parts.put(chunk.chunkIndex, chunk.data);
+                    assembly.receivedChunks.set(chunk.chunkIndex);
+
+                    if (!assembly.isComplete()) return;
+                    pendingImportChunks.remove(chunk.sessionId);
+
+                    User user = Command.getUser(player);
+                    if (user == null) return;
+                    Faction faction = user.getFaction();
+                    if (faction == null) {
+                        player.sendMessage(Text.literal("§cYou must be in a faction"), false);
+                        return;
+                    }
+                    if (user.rank != User.Rank.OWNER && user.rank != User.Rank.COMMANDER
+                            && user.rank != User.Rank.LEADER) {
+                        player.sendMessage(Text.literal("§cOnly faction leadership can import dimension regions!"), false);
+                        return;
+                    }
+
+                    String json = io.icker.factions.util.RegionTransfer.gunzip(assembly.assemble());
+                    io.icker.factions.util.RegionTransfer.ExportData imported =
+                            io.icker.factions.util.RegionTransfer.parseJson(json);
+                    io.icker.factions.util.RegionTransfer.ImportStats stats =
+                            io.icker.factions.util.RegionTransfer.mergeImport(faction, imported);
+
+                    faction.saveDimensionBlacklistToJson(true);
+                    faction.saveDimensionWhitelistToJson(true);
+                    io.icker.factions.api.events.FactionEvents.MODIFY.invoker().onModify(faction);
+                    Faction.save();
+                    broadcastDimensionsToFaction(faction);
+                    syncDimensionsToPlayer(player, faction.dimensionBlacklist, false);
+                    syncDimensionsToPlayer(player, faction.dimensionWhitelist, true);
+
+                    new io.icker.factions.util.Message(
+                            "Imported ").add(new io.icker.factions.util.Message(stats.blacklistAdded + "")
+                                    .format(net.minecraft.util.Formatting.YELLOW))
+                            .add(" blacklist / ")
+                            .add(new io.icker.factions.util.Message(stats.whitelistAdded + "")
+                                    .format(net.minecraft.util.Formatting.YELLOW))
+                            .add(" whitelist regions")
+                            .send(player, false);
+                    if (stats.croppedToClaims > 0 || stats.croppedToOpposite > 0
+                            || stats.duplicatesSkipped > 0 || stats.dropped > 0) {
+                        new io.icker.factions.util.Message(
+                                "Cropped " + stats.croppedToClaims + " to claims, "
+                                + stats.croppedToOpposite + " to existing opposite regions, skipped "
+                                + stats.duplicatesSkipped + " duplicates, dropped "
+                                + stats.dropped + " outside claims/conflicts").send(player, false);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    player.sendMessage(Text.literal("§cError importing regions: " + e.getMessage()), false);
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Send gzip-chunked export payload from server to client.
+     */
+    public static void sendExportChunks(ServerPlayerEntity player, String filename, String json) {
+        try {
+            java.util.UUID sessionId = java.util.UUID.randomUUID();
+            byte[] compressed = io.icker.factions.util.RegionTransfer.gzip(json);
+            java.util.List<DimensionFilePacket> chunks =
+                    io.icker.factions.util.RegionTransfer.chunkPayload(sessionId, filename, compressed);
+
+            for (DimensionFilePacket packet : chunks) {
+                sendNbt(player, EXPORT_PACKET_ID, packet.toNbt());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            player.sendMessage(Text.literal("§cError exporting regions: " + e.getMessage()), false);
+        }
+    }
+
+    /**
+     * Ask the client to read a local export file and upload it.
+     */
+    public static void sendImportRequest(ServerPlayerEntity player, String filename) {
+        try {
+            DimensionFilePacket packet = new DimensionFilePacket(
+                    java.util.UUID.randomUUID(), 1, 0, filename, new byte[0]);
+            sendNbt(player, IMPORT_REQUEST_PACKET_ID, packet.toNbt());
+            new io.icker.factions.util.Message("Requesting import of " + filename + " from your client...")
+                    .send(player, false);
+        } catch (Exception e) {
+            e.printStackTrace();
+            player.sendMessage(Text.literal("§cError requesting import: " + e.getMessage()), false);
+        }
+    }
+
+    private static void sendNbt(ServerPlayerEntity player, Identifier id, net.minecraft.nbt.NbtCompound nbt) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            DataOutputStream dos = new DataOutputStream(baos);
+            NbtIo.write(nbt, dos);
+            byte[] nbtBytes = baos.toByteArray();
+            io.netty.buffer.ByteBuf byteBuf = io.netty.buffer.Unpooled.copiedBuffer(nbtBytes);
+            PacketByteBuf buf = new PacketByteBuf(byteBuf);
+            ServerPlayNetworking.send(player, id, buf);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
      * Serialize dimensions to bytes for network transmission
      */
     public static byte[] serializeDimensions(java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> dimensions) {
@@ -577,7 +755,8 @@ public class DimensionNetworkHandler {
                 continue;
             }
             // Carve out unclaimed chunks from this region
-            java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> carved = carveUnclaimedChunks(dim, claims);
+            java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> carved =
+                    io.icker.factions.util.RegionClipper.carveToClaims(dim, claims);
             result.addAll(carved);
             // If the carved result has fewer/smaller regions, we changed something
             if (carved.size() == 1 && carved.get(0).minX == dim.minX && carved.get(0).maxX == dim.maxX
@@ -594,103 +773,5 @@ public class DimensionNetworkHandler {
             list.addAll(result);
         }
         return changed;
-    }
-    
-    /**
-     * Carve out all unclaimed chunks from a dimension region by splitting it into fragments
-     * that only cover claimed chunks. Uses box subtraction (same logic as InteractionManager).
-     */
-    private static java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> carveUnclaimedChunks(
-            io.icker.factions.api.persistents.BlacklistedDimension dim,
-            java.util.List<io.icker.factions.api.persistents.Claim> claims) {
-        java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> fragments = new java.util.ArrayList<>();
-        fragments.add(dim);
-        
-        // For each chunk this region covers (in the same world), check if it's claimed
-        int minChunkX = Math.floorDiv(dim.minX, 16);
-        int maxChunkX = Math.floorDiv(dim.maxX, 16);
-        int minChunkZ = Math.floorDiv(dim.minZ, 16);
-        int maxChunkZ = Math.floorDiv(dim.maxZ, 16);
-        
-        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
-            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
-                // Check if this chunk is claimed by this faction
-                boolean isClaimed = false;
-                for (io.icker.factions.api.persistents.Claim claim : claims) {
-                    if (claim.x == chunkX && claim.z == chunkZ && claim.level.equals(dim.world)) {
-                        isClaimed = true;
-                        break;
-                    }
-                }
-                if (isClaimed) continue; // Claimed chunk, keep it
-                
-                // Unclaimed chunk - carve it out of all current fragments
-                int claimMinX = chunkX * 16;
-                int claimMaxX = (chunkX + 1) * 16 - 1;
-                int claimMinZ = chunkZ * 16;
-                int claimMaxZ = (chunkZ + 1) * 16 - 1;
-                
-                java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> newFragments = new java.util.ArrayList<>();
-                for (io.icker.factions.api.persistents.BlacklistedDimension frag : fragments) {
-                    // Check overlap
-                    if (frag.world.equals(dim.world) && 
-                        frag.minX <= claimMaxX && frag.maxX >= claimMinX &&
-                        frag.minZ <= claimMaxZ && frag.maxZ >= claimMinZ) {
-                        // Overlaps - subtract this chunk
-                        newFragments.addAll(subtractChunkFromRegion(frag, claimMinX, claimMaxX, claimMinZ, claimMaxZ));
-                    } else {
-                        // No overlap, keep as-is
-                        newFragments.add(frag);
-                    }
-                }
-                fragments = newFragments;
-            }
-        }
-        
-        return fragments;
-    }
-    
-    /**
-     * Subtract a single claimed chunk from a region, splitting into up to 4 sub-regions.
-     * Same logic as InteractionManager.subtractBlacklistedClaim.
-     */
-    private static java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> subtractChunkFromRegion(
-            io.icker.factions.api.persistents.BlacklistedDimension dim,
-            int claimMinX, int claimMaxX, int claimMinZ, int claimMaxZ) {
-        java.util.List<io.icker.factions.api.persistents.BlacklistedDimension> result = new java.util.ArrayList<>();
-        
-        // Left box
-        if (dim.minX < claimMinX) {
-            result.add(new io.icker.factions.api.persistents.BlacklistedDimension(
-                dim.world, dim.minX, dim.minY, dim.minZ,
-                claimMinX - 1, dim.maxY, dim.maxZ, dim.name
-            ));
-        }
-        // Right box
-        if (dim.maxX > claimMaxX) {
-            result.add(new io.icker.factions.api.persistents.BlacklistedDimension(
-                dim.world, claimMaxX + 1, dim.minY, dim.minZ,
-                dim.maxX, dim.maxY, dim.maxZ, dim.name
-            ));
-        }
-        // Front box (z: dim.minZ to claimMinZ-1, x clamped)
-        if (dim.minZ < claimMinZ) {
-            result.add(new io.icker.factions.api.persistents.BlacklistedDimension(
-                dim.world,
-                Math.max(dim.minX, claimMinX), dim.minY, dim.minZ,
-                Math.min(dim.maxX, claimMaxX), dim.maxY, claimMinZ - 1,
-                dim.name
-            ));
-        }
-        // Back box (z: claimMaxZ+1 to dim.maxZ, x clamped)
-        if (dim.maxZ > claimMaxZ) {
-            result.add(new io.icker.factions.api.persistents.BlacklistedDimension(
-                dim.world,
-                Math.max(dim.minX, claimMinX), dim.minY, claimMaxZ + 1,
-                Math.min(dim.maxX, claimMaxX), dim.maxY, dim.maxZ,
-                dim.name
-            ));
-        }
-        return result;
     }
 }
