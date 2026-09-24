@@ -179,7 +179,7 @@ public class InfoCommand implements Command {
                 .append("\n");
         if (FactionsMod.CONFIG.BANK.ENABLED) {
             powerHover.append(Text.literal("  Bank: $").formatted(Formatting.GOLD))
-                    .append(Text.literal(String.valueOf(faction.getBankBalance())).formatted(Formatting.GREEN))
+                    .append(Text.literal(io.icker.factions.util.Money.format(faction.getBankBalance())).formatted(Formatting.GREEN))
                     .append("\n");
         }
         powerHover.append(Text.literal("War: ").formatted(Formatting.GOLD))

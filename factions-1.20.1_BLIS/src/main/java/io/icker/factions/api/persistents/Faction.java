@@ -92,7 +92,7 @@ public class Faction {
     private long lastDecaySettlement;
 
     @Field("BankBalance")
-    private int bankBalance;
+    private double bankBalance;
 
     @Field("BankMigrationDone")
     private boolean bankMigrationDone;
@@ -286,13 +286,7 @@ public class Faction {
 
         if (decay <= 0) return wealthPower;
 
-        if (bankBalance >= decay) {
-            withdrawFromBank(decay);
-            lastDecaySettlement = now;
-            return wealthPower;
-        }
-
-        int covered = Math.min(decay, Math.max(0, bankBalance));
+        int covered = (int) Math.min(decay, Math.max(0, bankBalance));
         withdrawFromBank(covered);
         wealthPower = Math.max(0, wealthPower - (decay - covered));
         lastDecaySettlement = now;
@@ -592,20 +586,29 @@ public class Faction {
         return true;
     }
 
-    public int getBankBalance() { return bankBalance; }
+    public double getBankBalance() { return bankBalance; }
 
-    public int depositToBank(int amount) {
-        int maxBalance = FactionsMod.CONFIG.BANK.MAX_BALANCE;
-        int added = maxBalance < 0 ? amount : Math.min(amount, maxBalance - bankBalance);
+    public double depositToBank(double amount) {
+        amount = roundMoney(amount);
+        if (amount <= 0) return 0;
+        double maxBalance = FactionsMod.CONFIG.BANK.MAX_BALANCE;
+        double added = maxBalance < 0 ? amount : Math.min(amount, maxBalance - bankBalance);
         if (added <= 0) return 0;
-        bankBalance += added;
-        return added;
+        bankBalance = roundMoney(bankBalance + added);
+        return roundMoney(added);
     }
 
-    public int withdrawFromBank(int amount) {
-        int withdrawn = Math.min(amount, bankBalance);
-        bankBalance -= withdrawn;
-        return withdrawn;
+    public double withdrawFromBank(double amount) {
+        amount = roundMoney(amount);
+        if (amount <= 0) return 0;
+        double withdrawn = Math.min(amount, bankBalance);
+        bankBalance = roundMoney(bankBalance - withdrawn);
+        if (bankBalance < 0) bankBalance = 0;
+        return roundMoney(withdrawn);
+    }
+
+    private static double roundMoney(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 
     public int getTargetWealthPower() {

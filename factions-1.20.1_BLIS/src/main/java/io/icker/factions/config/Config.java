@@ -33,6 +33,7 @@ public class Config {
                 .registerTypeAdapter(GodsConfig.class, new Deserializer<>(GodsConfig.class))
                 .registerTypeAdapter(BankConfig.class, new Deserializer<>(BankConfig.class))
                 .registerTypeAdapter(FilterListConfig.class, new Deserializer<>(FilterListConfig.class))
+                .registerTypeAdapter(BreakPenaltyConfig.class, new Deserializer<>(BreakPenaltyConfig.class))
                 .create();
 
         try {
@@ -83,6 +84,10 @@ public class Config {
                 config.BANK = defaults.BANK;
             }
 
+            if (config.BREAK_PENALTY == null) {
+                config.BREAK_PENALTY = defaults.BREAK_PENALTY;
+            }
+
             if (config.BLUEMAP == null) {
                 config.BLUEMAP = defaults.BLUEMAP;
             }
@@ -121,6 +126,8 @@ public class Config {
                     .registerTypeAdapter(VassalConfig.class, new Deserializer<>(VassalConfig.class))
                     .registerTypeAdapter(GodsConfig.class, new Deserializer<>(GodsConfig.class))
                     .registerTypeAdapter(BankConfig.class, new Deserializer<>(BankConfig.class))
+                    .registerTypeAdapter(FilterListConfig.class, new Deserializer<>(FilterListConfig.class))
+                    .registerTypeAdapter(BreakPenaltyConfig.class, new Deserializer<>(BreakPenaltyConfig.class))
                     .create();
 
             FileWriter writer = new FileWriter(file);
@@ -170,6 +177,9 @@ public class Config {
 
     @SerializedName("bank")
     public BankConfig BANK = new BankConfig();
+
+    @SerializedName("breakPenalty")
+    public BreakPenaltyConfig BREAK_PENALTY = new BreakPenaltyConfig();
 
     @SerializedName("bluemap")
     public BlueMapConfig BLUEMAP = new BlueMapConfig();

@@ -9,6 +9,7 @@ import io.icker.factions.api.persistents.Faction;
 import io.icker.factions.api.persistents.User;
 import io.icker.factions.config.PowerConfig;
 import io.icker.factions.util.Command;
+import io.icker.factions.util.Money;
 import io.icker.factions.util.Message;
 
 import net.minecraft.item.ItemStack;
@@ -57,7 +58,7 @@ public class SacrificeCommand implements Command {
         int totalValue = matchedItem.VALUE * stackSize;
 
         // Deposit to faction bank
-        int actualAdded = faction.depositToBank(totalValue);
+        double actualAdded = faction.depositToBank(totalValue);
 
         if (actualAdded == 0) {
             new Message("Faction bank is full").fail().send(player, false);
@@ -67,13 +68,13 @@ public class SacrificeCommand implements Command {
         faction.setLastSacrifice(System.currentTimeMillis());
 
         // Consume the items
-        int itemsConsumed = (int) Math.ceil((double) actualAdded / matchedItem.VALUE);
+        int itemsConsumed = (int) Math.ceil(actualAdded / matchedItem.VALUE);
         heldItem.decrement(itemsConsumed);
 
-        new Message("%s deposited $%d to faction bank (bank: $%d)",
+        new Message("%s deposited $%s to faction bank (bank: $%s)",
                 player.getName().getString(),
-                itemsConsumed,
-                faction.getBankBalance()).send(faction);
+                Money.format(actualAdded),
+                Money.format(faction.getBankBalance())).send(faction);
 
         return 1;
     }

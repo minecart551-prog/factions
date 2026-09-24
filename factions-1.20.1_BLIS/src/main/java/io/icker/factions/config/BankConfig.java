@@ -13,5 +13,5 @@ public class BankConfig {
     public String _COMMENT_MAX_BALANCE = "Maximum bank balance per faction (-1 = unlimited)";
 
     @SerializedName("maxBalance")
-    public int MAX_BALANCE = -1;
+    public double MAX_BALANCE = -1;
 }

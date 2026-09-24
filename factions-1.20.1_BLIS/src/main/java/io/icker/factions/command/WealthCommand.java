@@ -10,6 +10,7 @@ import io.icker.factions.api.persistents.Claim;
 import io.icker.factions.api.persistents.Faction;
 import io.icker.factions.api.persistents.User;
 import io.icker.factions.util.Command;
+import io.icker.factions.util.Money;
 import io.icker.factions.util.Message;
 
 import java.util.List;
@@ -27,7 +28,6 @@ public class WealthCommand implements Command {
         Faction faction = user.getFaction();
 
         int wealthPower = faction.getWealthPower();
-        int bankBalance = faction.getBankBalance();
         int targetWealth = faction.getTargetWealthPower();
         List<Claim> claims = faction.getClaims();
         int requiredPower = claims.size() * FactionsMod.CONFIG.POWER.CLAIM_WEIGHT;
@@ -40,7 +40,7 @@ public class WealthCommand implements Command {
         new Message(Formatting.GOLD + "=== Faction Wealth ===").send(player, false);
         new Message(Formatting.GRAY + "  Wealth Power: " + Formatting.GREEN + wealthPower).send(player, false);
         new Message(Formatting.GRAY + "  Decay Rate: " + Formatting.RED + effectiveDecay + "/day").send(player, false);
-        new Message(Formatting.GRAY + "  Bank Balance: $" + Formatting.AQUA + bankBalance).send(player, false);
+        new Message(Formatting.GRAY + "  Bank Balance: $" + Formatting.AQUA + Money.format(faction.getBankBalance())).send(player, false);
         new Message(Formatting.GRAY + "  Required for Claims: " + Formatting.YELLOW + requiredPower).send(player, false);
         new Message(Formatting.GRAY + "  Target Wealth Power: " + Formatting.YELLOW + targetWealth).send(player, false);
 
@@ -54,18 +54,30 @@ public class WealthCommand implements Command {
 
         int amount = IntegerArgumentType.getInteger(context, "amount");
 
-        int withdrawn = faction.withdrawFromBank(amount);
-        if (withdrawn == 0) {
-            new Message("Not enough money in the bank (have $" + faction.getBankBalance() + ")").fail().send(player, false);
+        double withdrawn = faction.withdrawFromBank(amount);
+        if (withdrawn <= 0) {
+            new Message("Not enough money in the bank (have $" + Money.format(faction.getBankBalance()) + ")").fail().send(player, false);
             return 0;
         }
 
-        faction.addWealthPower(withdrawn);
+        int wealthGained = (int) Math.min(amount, Math.floor(withdrawn));
+        if (wealthGained <= 0) {
+            faction.depositToBank(withdrawn);
+            new Message("Need at least $1 in the bank to convert to wealth power").fail().send(player, false);
+            return 0;
+        }
 
-        new Message("%s converted $%d from bank to wealth power (bank: $%d, wealth: %d)",
+        double unused = Money.round(withdrawn - wealthGained);
+        if (unused > 0) {
+            faction.depositToBank(unused);
+        }
+
+        faction.addWealthPower(wealthGained);
+
+        new Message("%s converted $%s from bank to wealth power (bank: $%s, wealth: %d)",
                 player.getName().getString(),
-                withdrawn,
-                faction.getBankBalance(),
+                Money.format(wealthGained),
+                Money.format(faction.getBankBalance()),
                 faction.getWealthPower()).send(faction);
 
         return 1;
@@ -87,10 +99,10 @@ public class WealthCommand implements Command {
         faction.spendWealthPower(amount);
         faction.depositToBank(amount);
 
-        new Message("%s withdrew %d wealth power to bank (bank: $%d, wealth: %d)",
+        new Message("%s withdrew %d wealth power to bank (bank: $%s, wealth: %d)",
                 player.getName().getString(),
                 amount,
-                faction.getBankBalance(),
+                Money.format(faction.getBankBalance()),
                 faction.getWealthPower()).send(faction);
 
         return 1;

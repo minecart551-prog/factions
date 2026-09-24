@@ -305,7 +305,22 @@ public class AdminCommand implements Command {
         // Bank settings
         new Message(Formatting.YELLOW + "Bank Settings:").send(player, false);
         new Message(Formatting.GRAY + "  Enabled: " + Formatting.WHITE + FactionsMod.CONFIG.BANK.ENABLED).send(player, false);
-        new Message(Formatting.GRAY + "  Max Balance: " + Formatting.WHITE + FactionsMod.CONFIG.BANK.MAX_BALANCE).send(player, false);
+        new Message(Formatting.GRAY + "  Max Balance: " + Formatting.WHITE + io.icker.factions.util.Money.format(FactionsMod.CONFIG.BANK.MAX_BALANCE)).send(player, false);
+
+        // Break penalty settings
+        if (FactionsMod.CONFIG.BREAK_PENALTY != null) {
+            var bp = FactionsMod.CONFIG.BREAK_PENALTY;
+            new Message(Formatting.YELLOW + "Break Penalty Settings:").send(player, false);
+            new Message(Formatting.GRAY + "  Enabled: ")
+                    .add(new Message(bp.ENABLED ? "true" : "false")
+                            .format(bp.ENABLED ? Formatting.GREEN : Formatting.RED))
+                    .send(player, false);
+            new Message(Formatting.GRAY + "  Bank Cost Per Block: " + Formatting.WHITE + bp.BANK_COST_PER_BLOCK).send(player, false);
+            new Message(Formatting.GRAY + "  Damage Mode: " + Formatting.WHITE + bp.DAMAGE_MODE).send(player, false);
+            new Message(Formatting.GRAY + "  Normal Damage: " + Formatting.WHITE + bp.NORMAL_DAMAGE).send(player, false);
+            new Message(Formatting.GRAY + "  Armor Bypass Damage: " + Formatting.WHITE + bp.ARMOR_BYPASS_DAMAGE).send(player, false);
+            new Message(Formatting.GRAY + "  Uniform Break Time (s): " + Formatting.WHITE + bp.UNIFORM_BREAK_TIME_SECONDS).send(player, false);
+        }
 
         // War settings
         new Message(Formatting.YELLOW + "War Settings:").send(player, false);
@@ -536,9 +551,60 @@ public class AdminCommand implements Command {
     }
 
     private int setBankMaxBalance(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        int value = IntegerArgumentType.getInteger(context, "value");
+        double value = io.icker.factions.util.Money.round(DoubleArgumentType.getDouble(context, "value"));
         FactionsMod.CONFIG.BANK.MAX_BALANCE = value;
         sendConfigUpdate(context.getSource().getPlayerOrThrow(), "bank.maxBalance", value);
+        return 1;
+    }
+
+    // Break penalty
+    private int setBreakPenaltyEnabled(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        boolean value = BoolArgumentType.getBool(context, "value");
+        FactionsMod.CONFIG.BREAK_PENALTY.ENABLED = value;
+        sendConfigUpdate(context.getSource().getPlayerOrThrow(), "breakPenalty.enabled", value);
+        return 1;
+    }
+
+    private int setBreakPenaltyBankCost(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        double value = io.icker.factions.util.Money.round(DoubleArgumentType.getDouble(context, "value"));
+        FactionsMod.CONFIG.BREAK_PENALTY.BANK_COST_PER_BLOCK = value;
+        sendConfigUpdate(context.getSource().getPlayerOrThrow(), "breakPenalty.bankCostPerBlock", value);
+        return 1;
+    }
+
+    private int setBreakPenaltyDamageMode(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        String raw = StringArgumentType.getString(context, "value").toUpperCase();
+        io.icker.factions.config.BreakPenaltyConfig.DamageMode value;
+        try {
+            value = io.icker.factions.config.BreakPenaltyConfig.DamageMode.valueOf(raw);
+        } catch (IllegalArgumentException e) {
+            context.getSource().sendError(net.minecraft.text.Text.literal(
+                    "Invalid damage mode. Options: NORMAL, ARMOR_BYPASS"));
+            return 0;
+        }
+        FactionsMod.CONFIG.BREAK_PENALTY.DAMAGE_MODE = value;
+        sendConfigUpdate(context.getSource().getPlayerOrThrow(), "breakPenalty.damageMode", value);
+        return 1;
+    }
+
+    private int setBreakPenaltyNormalDamage(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        double value = io.icker.factions.util.Money.round(DoubleArgumentType.getDouble(context, "value"));
+        FactionsMod.CONFIG.BREAK_PENALTY.NORMAL_DAMAGE = value;
+        sendConfigUpdate(context.getSource().getPlayerOrThrow(), "breakPenalty.normalDamage", value);
+        return 1;
+    }
+
+    private int setBreakPenaltyArmorBypassDamage(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        double value = io.icker.factions.util.Money.round(DoubleArgumentType.getDouble(context, "value"));
+        FactionsMod.CONFIG.BREAK_PENALTY.ARMOR_BYPASS_DAMAGE = value;
+        sendConfigUpdate(context.getSource().getPlayerOrThrow(), "breakPenalty.armorBypassDamage", value);
+        return 1;
+    }
+
+    private int setBreakPenaltyUniformTime(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        double value = DoubleArgumentType.getDouble(context, "value");
+        FactionsMod.CONFIG.BREAK_PENALTY.UNIFORM_BREAK_TIME_SECONDS = value;
+        sendConfigUpdate(context.getSource().getPlayerOrThrow(), "breakPenalty.uniformBreakTimeSeconds", value);
         return 1;
     }
 
@@ -980,8 +1046,27 @@ public class AdminCommand implements Command {
                                                         .then(CommandManager.argument("value", BoolArgumentType.bool())
                                                                 .executes(this::setBankEnabled)))
                                                 .then(CommandManager.literal("maxBalance")
-                                                        .then(CommandManager.argument("value", IntegerArgumentType.integer(-1))
+                                                        .then(CommandManager.argument("value", DoubleArgumentType.doubleArg(-1))
                                                                 .executes(this::setBankMaxBalance))))
+                                        .then(CommandManager.literal("breakPenalty")
+                                                .then(CommandManager.literal("enabled")
+                                                        .then(CommandManager.argument("value", BoolArgumentType.bool())
+                                                                .executes(this::setBreakPenaltyEnabled)))
+                                                .then(CommandManager.literal("bankCostPerBlock")
+                                                        .then(CommandManager.argument("value", DoubleArgumentType.doubleArg(0))
+                                                                .executes(this::setBreakPenaltyBankCost)))
+                                                .then(CommandManager.literal("damageMode")
+                                                        .then(CommandManager.argument("value", StringArgumentType.word())
+                                                                .executes(this::setBreakPenaltyDamageMode)))
+                                                .then(CommandManager.literal("normalDamage")
+                                                        .then(CommandManager.argument("value", DoubleArgumentType.doubleArg(0))
+                                                                .executes(this::setBreakPenaltyNormalDamage)))
+                                                .then(CommandManager.literal("armorBypassDamage")
+                                                        .then(CommandManager.argument("value", DoubleArgumentType.doubleArg(0))
+                                                                .executes(this::setBreakPenaltyArmorBypassDamage)))
+                                                .then(CommandManager.literal("uniformBreakTimeSeconds")
+                                                        .then(CommandManager.argument("value", DoubleArgumentType.doubleArg(0))
+                                                                .executes(this::setBreakPenaltyUniformTime))))
                                         .then(CommandManager.literal("war")
                                                 .then(CommandManager.literal("maxValue")
                                                         .then(CommandManager.argument("value", IntegerArgumentType.integer(0))

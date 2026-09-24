@@ -10,9 +10,14 @@ import io.icker.factions.api.persistents.Relationship;
 import io.icker.factions.api.persistents.Relationship.Permissions;
 import io.icker.factions.api.persistents.User;
 import io.icker.factions.api.persistents.BlacklistedDimension;
+import io.icker.factions.config.BreakPenaltyConfig;
 import io.icker.factions.core.InteractionsUtil.InteractionsUtilActions;
 import io.icker.factions.mixin.BucketItemAccessor;
 import io.icker.factions.mixin.ItemInvoker;
+import io.icker.factions.util.Message;
+
+import java.util.HashMap;
+import java.util.UUID;
 
 import net.minecraft.registry.Registries;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
@@ -46,6 +51,9 @@ import net.minecraft.world.World;
 
 public class InteractionManager {
     public static boolean DEBUG_PERMISSIONS = false;
+
+    private static final long ATTACK_NOTIFY_COOLDOWN_MS = 30_000L;
+    private static final HashMap<UUID, Long> attackNotifyCooldown = new HashMap<>();
 
     public static void register() {
         PlayerBlockBreakEvents.BEFORE.register(InteractionManager::onBreakBlock);
@@ -216,8 +224,103 @@ public class InteractionManager {
                 checkPermissions(player, pos, world, Permissions.BREAK_BLOCKS) == ActionResult.FAIL;
         if (result) {
             InteractionsUtil.warn(player, InteractionsUtilActions.BREAK_BLOCKS);
+            applyBreakPenalty(player, pos, world);
         }
         return !result;
+    }
+
+    /**
+     * True only when the block is inside another faction's claim and the player
+     * fails the BREAK_BLOCKS permission check. Own-faction, wilderness, bypass,
+     * and blacklist-only denials are not penalized.
+     */
+    public static boolean shouldApplyBreakPenalty(PlayerEntity player, BlockPos pos, World world) {
+        if (world.isClient() || !FactionsMod.CONFIG.CLAIM_PROTECTION) return false;
+        if (FactionsMod.CONFIG.BREAK_PENALTY == null || !FactionsMod.CONFIG.BREAK_PENALTY.ENABLED)
+            return false;
+
+        User user = User.get(player.getUuid());
+        if (user.bypass) return false;
+
+        String dimension = world.getRegistryKey().getValue().toString();
+        Claim claim = Claim.get(world.getChunk(pos).getPos().x, world.getChunk(pos).getPos().z, dimension);
+        if (claim == null) return false;
+
+        Faction claimFaction = claim.getFaction();
+        if (claimFaction == null) return false;
+
+        if (user.isInFaction()) {
+            Faction userFaction = user.getFaction();
+            if (userFaction != null && userFaction.getID().equals(claimFaction.getID())) {
+                return false;
+            }
+        }
+
+        return checkPermissions(player, pos, world, Permissions.BREAK_BLOCKS) == ActionResult.FAIL;
+    }
+
+    private static void applyBreakPenalty(PlayerEntity player, BlockPos pos, World world) {
+        if (!shouldApplyBreakPenalty(player, pos, world)) return;
+
+        var penalty = FactionsMod.CONFIG.BREAK_PENALTY;
+
+        // Bank charge on the claim owner's faction (clamped at 0 balance)
+        String dimension = world.getRegistryKey().getValue().toString();
+        ChunkPos chunkPosition = world.getChunk(pos).getPos();
+        Claim claim = Claim.get(chunkPosition.x, chunkPosition.z, dimension);
+        Faction claimFaction = claim != null ? claim.getFaction() : null;
+        double charged = 0;
+        if (penalty.BANK_COST_PER_BLOCK > 0 && claimFaction != null) {
+            charged = claimFaction.withdrawFromBank(penalty.BANK_COST_PER_BLOCK);
+        }
+
+        // Damage to the offending player
+        double damage = penalty.DAMAGE_MODE == BreakPenaltyConfig.DamageMode.ARMOR_BYPASS
+                ? penalty.ARMOR_BYPASS_DAMAGE
+                : penalty.NORMAL_DAMAGE;
+        boolean damaged = false;
+        if (damage > 0 && player instanceof net.minecraft.server.network.ServerPlayerEntity serverPlayer) {
+            var source = penalty.DAMAGE_MODE == BreakPenaltyConfig.DamageMode.ARMOR_BYPASS
+                    ? world.getDamageSources().magic()
+                    : world.getDamageSources().generic();
+            damaged = serverPlayer.damage(source, (float) damage);
+        }
+
+        User user = User.get(player.getUuid());
+        if ((charged > 0 || damaged) && !user.radar) {
+            Message msg = new Message("Raid: ");
+            boolean needSep = false;
+            if (charged > 0) {
+                msg.raw().append(net.minecraft.text.Text.literal(
+                                String.format("-$%s from claim's faction bank",
+                                        io.icker.factions.util.Money.format(charged)))
+                        .formatted(net.minecraft.util.Formatting.GREEN));
+                needSep = true;
+            }
+            if (damaged) {
+                if (needSep) msg.add(" · ");
+                msg.raw().append(net.minecraft.text.Text.literal(
+                                String.format("%.1f HP", damage))
+                        .formatted(net.minecraft.util.Formatting.RED));
+            }
+            msg.send(player, true);
+        }
+
+        notifyFactionUnderAttack(claimFaction, pos);
+    }
+
+    private static void notifyFactionUnderAttack(Faction faction, BlockPos pos) {
+        if (faction == null) return;
+
+        UUID id = faction.getID();
+        long now = System.currentTimeMillis();
+        Long last = attackNotifyCooldown.get(id);
+        if (last != null && now - last < ATTACK_NOTIFY_COOLDOWN_MS) return;
+
+        attackNotifyCooldown.put(id, now);
+        new Message("Faction block at %d %d %d is being attacked", pos.getX(), pos.getY(), pos.getZ())
+                .fail()
+                .send(faction);
     }
 
     // private static ActionResult onExplodeBlock(Explosion explosion, BlockView world, BlockPos pos, BlockState state) {

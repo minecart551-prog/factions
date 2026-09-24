@@ -58,7 +58,7 @@ public class Database {
     private static <T> T deserialize(Class<T> clazz, NbtElement value)
             throws IOException, ReflectiveOperationException {
         if (SerializerRegistry.contains(clazz)) {
-            return SerializerRegistry.fromNbtElement(clazz, value);
+            return SerializerRegistry.fromNbtElement(clazz, coerceNumber(clazz, value));
         }
 
         NbtCompound compound = (NbtCompound) value;
@@ -84,6 +84,30 @@ public class Database {
         }
 
         return item;
+    }
+
+    /**
+     * Coerce numeric NBT values to the expected type so field type changes
+     * (e.g. int bank balance → double) remain backward compatible with old saves.
+     */
+    private static NbtElement coerceNumber(Class<?> type, NbtElement value) {
+        if (!(value instanceof net.minecraft.nbt.AbstractNbtNumber number)) {
+            return value;
+        }
+
+        if (type == double.class && !(value instanceof net.minecraft.nbt.NbtDouble)) {
+            return net.minecraft.nbt.NbtDouble.of(number.doubleValue());
+        }
+        if (type == float.class && !(value instanceof net.minecraft.nbt.NbtFloat)) {
+            return net.minecraft.nbt.NbtFloat.of((float) number.doubleValue());
+        }
+        if (type == int.class && !(value instanceof net.minecraft.nbt.NbtInt)) {
+            return net.minecraft.nbt.NbtInt.of(number.intValue());
+        }
+        if (type == long.class && !(value instanceof net.minecraft.nbt.NbtLong)) {
+            return net.minecraft.nbt.NbtLong.of(number.longValue());
+        }
+        return value;
     }
 
     private static <T> ArrayList<T> deserializeList(Class<T> clazz, NbtList list)

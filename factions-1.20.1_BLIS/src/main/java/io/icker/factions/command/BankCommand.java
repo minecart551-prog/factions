@@ -1,6 +1,6 @@
 package io.icker.factions.command;
 
-import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.LiteralCommandNode;
@@ -10,6 +10,7 @@ import io.icker.factions.api.persistents.Faction;
 import io.icker.factions.api.persistents.User;
 import io.icker.factions.config.PowerConfig;
 import io.icker.factions.util.Command;
+import io.icker.factions.util.Money;
 import io.icker.factions.util.Message;
 
 import net.minecraft.item.Item;
@@ -28,17 +29,15 @@ public class BankCommand implements Command {
         User user = Command.getUser(player);
         Faction faction = user.getFaction();
 
-        int bankBalance = faction.getBankBalance();
-
         new Message(Formatting.GOLD + "=== Faction Bank ===").send(player, false);
-        new Message(Formatting.GRAY + "  Balance: $" + Formatting.AQUA + bankBalance).send(player, false);
+        new Message(Formatting.GRAY + "  Balance: $" + Formatting.AQUA + Money.format(faction.getBankBalance())).send(player, false);
 
         if (!FactionsMod.CONFIG.BANK.ENABLED) {
             new Message(Formatting.RED + "  Bank system is disabled").send(player, false);
         }
 
         if (FactionsMod.CONFIG.BANK.MAX_BALANCE >= 0) {
-            new Message(Formatting.GRAY + "  Max Balance: $" + Formatting.YELLOW + FactionsMod.CONFIG.BANK.MAX_BALANCE).send(player, false);
+            new Message(Formatting.GRAY + "  Max Balance: $" + Formatting.YELLOW + Money.format(FactionsMod.CONFIG.BANK.MAX_BALANCE)).send(player, false);
         }
 
         return 1;
@@ -49,11 +48,11 @@ public class BankCommand implements Command {
         User user = Command.getUser(player);
         Faction faction = user.getFaction();
 
-        int amount = IntegerArgumentType.getInteger(context, "amount");
+        double amount = Money.round(DoubleArgumentType.getDouble(context, "amount"));
 
-        int withdrawn = faction.withdrawFromBank(amount);
-        if (withdrawn == 0) {
-            new Message("Not enough money in the bank (have $" + faction.getBankBalance() + ")").fail().send(player, false);
+        double withdrawn = faction.withdrawFromBank(amount);
+        if (withdrawn <= 0) {
+            new Message("Not enough money in the bank (have $" + Money.format(faction.getBankBalance()) + ")").fail().send(player, false);
             return 0;
         }
 
@@ -74,8 +73,14 @@ public class BankCommand implements Command {
         }
 
         int valuePerItem = items[0].VALUE;
-        int itemsToGive = withdrawn / valuePerItem;
-        int leftover = withdrawn % valuePerItem;
+        if (valuePerItem <= 0) {
+            new Message("Invalid sacrifice item value configured").fail().send(player, false);
+            faction.depositToBank(withdrawn);
+            return 0;
+        }
+
+        int itemsToGive = (int) Math.floor(withdrawn / valuePerItem);
+        double leftover = Money.round(withdrawn - itemsToGive * valuePerItem);
 
         if (itemsToGive > 0) {
             ItemStack stack = new ItemStack(item, itemsToGive);
@@ -86,12 +91,13 @@ public class BankCommand implements Command {
             faction.depositToBank(leftover);
         }
 
-        new Message("%s withdrew $%d from faction bank (%d %s, bank: $%d)",
+        double spent = Money.round(withdrawn - leftover);
+        new Message("%s withdrew $%s from faction bank (%d %s, bank: $%s)",
                 player.getName().getString(),
-                withdrawn - leftover,
+                Money.format(spent),
                 itemsToGive,
                 items[0].ITEM_ID,
-                faction.getBankBalance()).send(faction);
+                Money.format(faction.getBankBalance())).send(faction);
 
         return 1;
     }
@@ -103,7 +109,7 @@ public class BankCommand implements Command {
                 .executes(this::info)
                 .then(CommandManager.literal("withdraw")
                         .requires(Requires.isLeader())
-                        .then(CommandManager.argument("amount", IntegerArgumentType.integer(1))
+                        .then(CommandManager.argument("amount", DoubleArgumentType.doubleArg(0.01))
                                 .executes(this::withdraw)))
                 .build();
     }
