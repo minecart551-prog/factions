@@ -238,6 +238,7 @@ public class InteractionManager {
         if (world.isClient() || !FactionsMod.CONFIG.CLAIM_PROTECTION) return false;
         if (FactionsMod.CONFIG.BREAK_PENALTY == null || !FactionsMod.CONFIG.BREAK_PENALTY.ENABLED)
             return false;
+        if (player.isCreative()) return false;
 
         User user = User.get(player.getUuid());
         if (user.bypass) return false;
@@ -264,14 +265,25 @@ public class InteractionManager {
 
         var penalty = FactionsMod.CONFIG.BREAK_PENALTY;
 
-        // Bank charge on the claim owner's faction (clamped at 0 balance)
+        // Wealth transfer: claim owner loses up to cost; breaker's faction gains if any
         String dimension = world.getRegistryKey().getValue().toString();
         ChunkPos chunkPosition = world.getChunk(pos).getPos();
         Claim claim = Claim.get(chunkPosition.x, chunkPosition.z, dimension);
         Faction claimFaction = claim != null ? claim.getFaction() : null;
+        User breaker = User.get(player.getUuid());
+        Faction attackerFaction = breaker != null && breaker.isInFaction() ? breaker.getFaction() : null;
         double charged = 0;
+        double earned = 0;
         if (penalty.BANK_COST_PER_BLOCK > 0 && claimFaction != null) {
-            charged = claimFaction.withdrawFromBank(penalty.BANK_COST_PER_BLOCK);
+            double available = claimFaction.getWealthPower();
+            charged = Math.min(penalty.BANK_COST_PER_BLOCK, Math.max(0, available));
+            if (charged > 0) {
+                claimFaction.spendWealthPower(charged);
+                if (attackerFaction != null && !attackerFaction.getID().equals(claimFaction.getID())) {
+                    attackerFaction.addWealthPower(charged);
+                    earned = charged;
+                }
+            }
         }
 
         // Damage to the offending player
@@ -291,10 +303,16 @@ public class InteractionManager {
             Message msg = new Message("Raid: ");
             boolean needSep = false;
             if (charged > 0) {
-                msg.raw().append(net.minecraft.text.Text.literal(
-                                String.format("-$%s from claim's faction bank",
-                                        io.icker.factions.util.Money.format(charged)))
-                        .formatted(net.minecraft.util.Formatting.GREEN));
+                if (earned > 0) {
+                    msg.raw().append(net.minecraft.text.Text.literal(
+                                    String.format("+$%s to your faction wealth",
+                                            io.icker.factions.util.Money.format(earned)))
+                            .formatted(net.minecraft.util.Formatting.GREEN));
+                } else {
+                    msg.raw().append(net.minecraft.text.Text.literal(
+                                    "You're not in a faction to earn raid money")
+                            .formatted(net.minecraft.util.Formatting.RED));
+                }
                 needSep = true;
             }
             if (damaged) {

@@ -121,13 +121,13 @@ public class PowerConfig {
 
     public static class WealthPower {
         @SerializedName("_comment_decayPerDay")
-        public String _COMMENT_DECAY_PER_DAY = "Base wealth power lost per real day since last sacrifice";
+        public String _COMMENT_DECAY_PER_DAY = "Unused (wealth no longer decays); kept for config compatibility";
 
         @SerializedName("decayPerDay")
         public int DECAY_PER_DAY = 5;
 
         @SerializedName("_comment_decayDivisor")
-        public String _COMMENT_DECAY_DIVISOR = "Scaling factor: effective decay = decayPerDay + (wealthPower / decayDivisor). Higher divisor = slower scaling. Set to 0 to disable scaling.";
+        public String _COMMENT_DECAY_DIVISOR = "Unused (wealth no longer decays); kept for config compatibility";
 
         @SerializedName("decayDivisor")
         public double DECAY_DIVISOR = 10;

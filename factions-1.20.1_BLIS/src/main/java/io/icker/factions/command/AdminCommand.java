@@ -297,15 +297,10 @@ public class AdminCommand implements Command {
         new Message(Formatting.GRAY + "  Ticks: " + Formatting.WHITE + FactionsMod.CONFIG.POWER.POWER_TICKS.TICKS).send(player, false);
         new Message(Formatting.GRAY + "  Reward: " + Formatting.WHITE + FactionsMod.CONFIG.POWER.POWER_TICKS.REWARD).send(player, false);
 
-        // Wealth settings
+        // Wealth settings (decay keys kept in config file but unused)
         new Message(Formatting.YELLOW + "Wealth Settings:").send(player, false);
-        new Message(Formatting.GRAY + "  Wealth Decay Per Day: " + Formatting.WHITE + FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY).send(player, false);
-        new Message(Formatting.GRAY + "  Wealth Decay Divisor: " + Formatting.WHITE + FactionsMod.CONFIG.POWER.WEALTH.DECAY_DIVISOR).send(player, false);
-
-        // Bank settings
-        new Message(Formatting.YELLOW + "Bank Settings:").send(player, false);
-        new Message(Formatting.GRAY + "  Enabled: " + Formatting.WHITE + FactionsMod.CONFIG.BANK.ENABLED).send(player, false);
-        new Message(Formatting.GRAY + "  Max Balance: " + Formatting.WHITE + io.icker.factions.util.Money.format(FactionsMod.CONFIG.BANK.MAX_BALANCE)).send(player, false);
+        new Message(Formatting.GRAY + "  Decay Per Day (unused): " + Formatting.WHITE + FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY).send(player, false);
+        new Message(Formatting.GRAY + "  Decay Divisor (unused): " + Formatting.WHITE + FactionsMod.CONFIG.POWER.WEALTH.DECAY_DIVISOR).send(player, false);
 
         // Break penalty settings
         if (FactionsMod.CONFIG.BREAK_PENALTY != null) {
@@ -315,7 +310,7 @@ public class AdminCommand implements Command {
                     .add(new Message(bp.ENABLED ? "true" : "false")
                             .format(bp.ENABLED ? Formatting.GREEN : Formatting.RED))
                     .send(player, false);
-            new Message(Formatting.GRAY + "  Bank Cost Per Block: " + Formatting.WHITE + bp.BANK_COST_PER_BLOCK).send(player, false);
+            new Message(Formatting.GRAY + "  Wealth Cost Per Block: " + Formatting.WHITE + bp.BANK_COST_PER_BLOCK).send(player, false);
             new Message(Formatting.GRAY + "  Damage Mode: " + Formatting.WHITE + bp.DAMAGE_MODE).send(player, false);
             new Message(Formatting.GRAY + "  Normal Damage: " + Formatting.WHITE + bp.NORMAL_DAMAGE).send(player, false);
             new Message(Formatting.GRAY + "  Armor Bypass Damage: " + Formatting.WHITE + bp.ARMOR_BYPASS_DAMAGE).send(player, false);
@@ -542,7 +537,7 @@ public class AdminCommand implements Command {
         return 1;
     }
 
-    // Bank
+    // Bank (legacy config keys; bank system removed — wealth is the only money)
     private int setBankEnabled(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         boolean value = BoolArgumentType.getBool(context, "value");
         FactionsMod.CONFIG.BANK.ENABLED = value;

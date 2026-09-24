@@ -25,8 +25,7 @@ public class Faction {
     private static final HashMap<UUID, Faction> STORE =
             Database.load(Faction.class, Faction::getID);
     
-    // Post-load migration: migrate old DimensionBlacklist to JSON format
-    // Also migrate excess wealth power to bank balance
+    // Post-load migration: DimensionBlacklist → JSON; bank balance → wealth power
     static {
         for (Faction faction : STORE.values()) {
             if (!faction.dimensionBlacklistOld.isEmpty()) {
@@ -37,23 +36,17 @@ public class Faction {
                 faction.loadDimensionBlacklistFromJson();
             }
 
-            // Bank migration: excess wealth power → bank balance (one-time only)
-            if (!faction.bankMigrationDone) {
-                faction.bankMigrationDone = true;
-                List<Claim> claims = Claim.getByFaction(faction.id);
-                int requiredPower = claims.size() * FactionsMod.CONFIG.POWER.CLAIM_WEIGHT;
-                int basePowerMax = FactionsMod.CONFIG.POWER.BASE
-                        + faction.getMemberPower()
-                        + (faction.getMutualAllies().size() * FactionsMod.CONFIG.POWER.POWER_PER_ALLY);
-                int otherPowers = Math.min(faction.power, basePowerMax)
-                        + faction.adminPower + faction.getWarPower()
-                        + faction.getFamePower() + faction.getVassalPowerBonus();
-                int targetWealth = Math.max(0, requiredPower - otherPowers);
-                int currentWealth = faction.wealthPower;
-                if (currentWealth > targetWealth) {
-                    faction.bankBalance = currentWealth - targetWealth;
-                    faction.wealthPower = targetWealth;
+            // One-time: add any bank balance into existing wealth power, then zero the bank
+            if (!faction.wealthMergeDone) {
+                if (!faction.bankMigrationDone) {
+                    // Pre-bank save: no bank money to move; skip old excess→bank split
+                    faction.bankMigrationDone = true;
                 }
+                if (faction.bankBalance > 0) {
+                    faction.wealthPower = roundMoney(faction.wealthPower + faction.bankBalance);
+                    faction.bankBalance = 0;
+                }
+                faction.wealthMergeDone = true;
             }
         }
     }
@@ -83,7 +76,7 @@ public class Faction {
     private int adminPower;
 
     @Field("WealthPower")
-    private int wealthPower;
+    private double wealthPower;
 
     @Field("LastSacrifice")
     private long lastSacrifice;
@@ -96,6 +89,12 @@ public class Faction {
 
     @Field("BankMigrationDone")
     private boolean bankMigrationDone;
+
+    @Field("WealthMergeDone")
+    private boolean wealthMergeDone;
+
+    @Field("WealthWithdrawMode")
+    private String wealthWithdrawMode = "OWNER";
 
     @Field("WarPower")
     private int warPower;
@@ -163,6 +162,10 @@ public class Faction {
     private String activeBlessingsJson = "[]";
 
     private static final Gson GSON = new Gson();
+
+    private static double roundMoney(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
 
     public Faction(String name, String description, String motd, Formatting color, boolean open,
             int power) {
@@ -240,7 +243,8 @@ public class Faction {
     public int getPower() {
         int basePowerMax = getBasePowerMax();
         int basePower = Math.min(power, basePowerMax);
-        return basePower + adminPower + getWealthPower() + getWarPower() + getFamePower() + getVassalPowerBonus();
+        return basePower + adminPower + (int) Math.floor(getWealthPower())
+                + getWarPower() + getFamePower() + getVassalPowerBonus();
     }
 
     public int getBasePowerMax() {
@@ -270,33 +274,13 @@ public class Faction {
     public boolean isAdminProtected() { return adminProtected; }
     public void setAdminProtected(boolean adminProtected) { this.adminProtected = adminProtected; }
 
-    public int getWealthPower() {
-        if (wealthPower <= 0) return 0;
-
-        long now = System.currentTimeMillis();
-        long reference = lastDecaySettlement;
-        if (reference <= 0) reference = lastSacrifice;
-        if (reference <= 0) reference = now;
-
-        long daysSince = (now - reference) / (1000L * 60 * 60 * 24);
-        int baseDecay = FactionsMod.CONFIG.POWER.WEALTH.DECAY_PER_DAY;
-        double divisor = FactionsMod.CONFIG.POWER.WEALTH.DECAY_DIVISOR;
-        int scaledDecay = divisor > 0 ? baseDecay + (int)(wealthPower / divisor) : baseDecay;
-        int decay = (int)(daysSince * scaledDecay);
-
-        if (decay <= 0) return wealthPower;
-
-        int covered = (int) Math.min(decay, Math.max(0, bankBalance));
-        withdrawFromBank(covered);
-        wealthPower = Math.max(0, wealthPower - (decay - covered));
-        lastDecaySettlement = now;
-        return wealthPower;
+    public double getWealthPower() {
+        return Math.max(0, wealthPower);
     }
 
-    public int addWealthPower(int amount) {
-        int currentPower = getWealthPower();
-        wealthPower = currentPower + amount;
-        lastDecaySettlement = System.currentTimeMillis();
+    public double addWealthPower(double amount) {
+        if (amount <= 0) return 0;
+        wealthPower = roundMoney(Math.max(0, wealthPower) + amount);
         return amount;
     }
 
@@ -498,7 +482,7 @@ public class Faction {
         int bonus = 0;
         int percent = FactionsMod.CONFIG.VASSAL.POWER_PERCENT;
         for (Faction vassal : getVassals()) {
-            int vassalPower = vassal.getBasePowerMax() + vassal.getWealthPower() + vassal.getWarPower();
+            int vassalPower = vassal.getBasePowerMax() + (int) Math.floor(vassal.getWealthPower()) + vassal.getWarPower();
             bonus += (vassalPower * percent) / 100;
         }
         return bonus;
@@ -579,43 +563,45 @@ public class Faction {
         activeBlessingsJson = GSON.toJson(blessings);
     }
 
-    public boolean spendWealthPower(int amount) {
-        int currentPower = getWealthPower();
+    public boolean spendWealthPower(double amount) {
+        if (amount <= 0) return false;
+        double currentPower = getWealthPower();
         if (currentPower < amount) return false;
-        wealthPower = currentPower - amount;
+        wealthPower = roundMoney(currentPower - amount);
+        if (wealthPower < 0) wealthPower = 0;
         return true;
     }
 
-    public double getBankBalance() { return bankBalance; }
-
-    public double depositToBank(double amount) {
-        amount = roundMoney(amount);
-        if (amount <= 0) return 0;
-        double maxBalance = FactionsMod.CONFIG.BANK.MAX_BALANCE;
-        double added = maxBalance < 0 ? amount : Math.min(amount, maxBalance - bankBalance);
-        if (added <= 0) return 0;
-        bankBalance = roundMoney(bankBalance + added);
-        return roundMoney(added);
-    }
-
-    public double withdrawFromBank(double amount) {
-        amount = roundMoney(amount);
-        if (amount <= 0) return 0;
-        double withdrawn = Math.min(amount, bankBalance);
-        bankBalance = roundMoney(bankBalance - withdrawn);
-        if (bankBalance < 0) bankBalance = 0;
-        return roundMoney(withdrawn);
-    }
-
-    private static double roundMoney(double value) {
-        return Math.round(value * 100.0) / 100.0;
-    }
-
-    public int getTargetWealthPower() {
+    public double getTargetWealthPower() {
         List<Claim> claims = getClaims();
         int requiredPower = claims.size() * FactionsMod.CONFIG.POWER.CLAIM_WEIGHT;
-        int otherPowers = getPower() - getWealthPower();
+        int otherPowers = getPower() - (int) Math.floor(getWealthPower());
         return Math.max(0, requiredPower - otherPowers);
+    }
+
+    /** OWNER (default) = owner only; LEADER = leaders+owner; COMMANDER = commanders+leaders+owner. */
+    public String getWealthWithdrawMode() {
+        if (wealthWithdrawMode == null || wealthWithdrawMode.isEmpty()) return "OWNER";
+        String mode = wealthWithdrawMode.toUpperCase();
+        return mode.equals("LEADER") || mode.equals("COMMANDER") ? mode : "OWNER";
+    }
+
+    public void setWealthWithdrawMode(String mode) {
+        String m = mode == null ? "" : mode.toUpperCase();
+        if (m.equals("LEADER") || m.equals("COMMANDER")) {
+            this.wealthWithdrawMode = m;
+        } else {
+            this.wealthWithdrawMode = "OWNER";
+        }
+    }
+
+    public boolean canWithdrawWealth(User user) {
+        if (user == null) return false;
+        return switch (getWealthWithdrawMode()) {
+            case "COMMANDER" -> user.rank == User.Rank.COMMANDER || user.rank == User.Rank.LEADER || user.rank == User.Rank.OWNER;
+            case "LEADER" -> user.rank == User.Rank.LEADER || user.rank == User.Rank.OWNER;
+            default -> user.rank == User.Rank.OWNER;
+        };
     }
 
 

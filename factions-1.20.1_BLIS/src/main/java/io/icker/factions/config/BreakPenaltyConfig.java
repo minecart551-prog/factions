@@ -8,13 +8,13 @@ public class BreakPenaltyConfig {
     }
 
     @SerializedName("_comment_enabled")
-    public String _COMMENT_ENABLED = "Whether unauthorized breaks in foreign claims deal damage and cost the claim owner's faction bank";
+    public String _COMMENT_ENABLED = "Whether unauthorized breaks in foreign claims deal damage and cost the claim owner's faction wealth power";
 
     @SerializedName("enabled")
     public boolean ENABLED = true;
 
     @SerializedName("_comment_bankCostPerBlock")
-    public String _COMMENT_BANK_COST_PER_BLOCK = "Amount deducted from the claim owner's faction bank per denied break (up to 2 decimals)";
+    public String _COMMENT_BANK_COST_PER_BLOCK = "Wealth power deducted from the claim owner's faction per denied break (JSON key kept for config compatibility)";
 
     @SerializedName("bankCostPerBlock")
     public double BANK_COST_PER_BLOCK = 5.0;

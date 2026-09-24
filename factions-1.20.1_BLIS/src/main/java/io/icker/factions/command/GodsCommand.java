@@ -100,10 +100,10 @@ public class GodsCommand implements Command {
         }
 
         // Check wealth power
-        int currentWealth = faction.getWealthPower();
+        double currentWealth = faction.getWealthPower();
         if (currentWealth < god.POWER_COST) {
-            new Message("Not enough wealth power (need %d, have %d)",
-                    god.POWER_COST, currentWealth).fail().send(player, false);
+            new Message("Not enough wealth power (need %d, have %s)",
+                    god.POWER_COST, io.icker.factions.util.Money.format(currentWealth)).fail().send(player, false);
             return 0;
         }
 

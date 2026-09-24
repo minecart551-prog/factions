@@ -57,11 +57,11 @@ public class SacrificeCommand implements Command {
         int stackSize = heldItem.getCount();
         int totalValue = matchedItem.VALUE * stackSize;
 
-        // Deposit to faction bank
-        double actualAdded = faction.depositToBank(totalValue);
+        // Add to faction wealth power
+        double actualAdded = faction.addWealthPower(totalValue);
 
-        if (actualAdded == 0) {
-            new Message("Faction bank is full").fail().send(player, false);
+        if (actualAdded <= 0) {
+            new Message("Failed to sacrifice items").fail().send(player, false);
             return 0;
         }
 
@@ -71,10 +71,10 @@ public class SacrificeCommand implements Command {
         int itemsConsumed = (int) Math.ceil(actualAdded / matchedItem.VALUE);
         heldItem.decrement(itemsConsumed);
 
-        new Message("%s deposited $%s to faction bank (bank: $%s)",
+        new Message("%s sacrificed $%s to faction wealth (wealth: %s)",
                 player.getName().getString(),
                 Money.format(actualAdded),
-                Money.format(faction.getBankBalance())).send(faction);
+                Money.format(faction.getWealthPower())).send(faction);
 
         return 1;
     }
