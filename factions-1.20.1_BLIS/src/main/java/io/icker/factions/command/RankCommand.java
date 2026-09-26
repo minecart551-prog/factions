@@ -21,13 +21,18 @@ public class RankCommand implements Command {
         ServerCommandSource source = context.getSource();
         ServerPlayerEntity player = source.getPlayerOrThrow();
 
-        if (target.getUuid().equals(player.getUuid())) {
-            new Message("You cannot promote yourself").format(Formatting.RED).send(player, false);
+        User actor = Command.getUser(player);
 
+        if (target.getUuid().equals(player.getUuid()) || target.getUuid().equals(actor.getID())) {
+            new Message("You cannot promote yourself").format(Formatting.RED).send(player, false);
             return 0;
         }
 
-        Faction faction = Command.getUser(player).getFaction();
+        Faction faction = actor.getFaction();
+        if (faction == null) {
+            new Message("You must be in a faction").fail().send(player, false);
+            return 0;
+        }
 
         for (User users : faction.getUsers())
             if (users.getID().equals(target.getUuid())) {
@@ -68,12 +73,18 @@ public class RankCommand implements Command {
         ServerCommandSource source = context.getSource();
         ServerPlayerEntity player = source.getPlayerOrThrow();
 
-        if (target.getUuid().equals(player.getUuid())) {
+        User actor = Command.getUser(player);
+
+        if (target.getUuid().equals(player.getUuid()) || target.getUuid().equals(actor.getID())) {
             new Message("You cannot demote yourself").format(Formatting.RED).send(player, false);
             return 0;
         }
 
-        Faction faction = Command.getUser(player).getFaction();
+        Faction faction = actor.getFaction();
+        if (faction == null) {
+            new Message("You must be in a faction").fail().send(player, false);
+            return 0;
+        }
 
         for (User user : faction.getUsers())
             if (user.getID().equals(target.getUuid())) {
@@ -87,7 +98,7 @@ public class RankCommand implements Command {
                     case MEMBER -> user.rank = User.Rank.GUEST;
                     case COMMANDER -> user.rank = User.Rank.MEMBER;
                     case LEADER -> {
-                        if (Command.getUser(player).rank == User.Rank.LEADER) {
+                        if (actor.rank == User.Rank.LEADER) {
                             new Message("You cannot demote a Leader")
                                     .format(Formatting.RED).send(player, false);
                             return 0;
@@ -123,35 +134,57 @@ public class RankCommand implements Command {
         ServerCommandSource source = context.getSource();
         ServerPlayerEntity player = source.getPlayerOrThrow();
 
-        if (target.getUuid().equals(player.getUuid())) {
+        User realUser = User.get(player.getUuid());
+        User actor = Command.getUser(player);
+
+        if (target.getUuid().equals(player.getUuid()) || target.getUuid().equals(actor.getID())) {
             new Message("You cannot transfer ownership to yourself").format(Formatting.RED)
                     .send(player, false);
-
             return 0;
         }
 
         User targetUser = User.get(target.getUuid());
-        UUID targetFaction = targetUser.isInFaction() ? targetUser.getFaction().getID() : null;
-        if (Command.getUser(player).getFaction().getID().equals(targetFaction)) {
-            targetUser.rank = User.Rank.OWNER;
-            Command.getUser(player).rank = User.Rank.LEADER;
-
-            context.getSource().getServer().getPlayerManager().sendCommandTree(player);
-            context.getSource().getServer().getPlayerManager().sendCommandTree(target);
-
-            new Message("Transferred ownership to " + target.getName().getString())
-                    .prependFaction(Faction.get(targetFaction)).send(player, false);
-
-            return 1;
+        if (!targetUser.isInFaction()) {
+            new Message(target.getName().getString() + " is not in your faction").format(Formatting.RED)
+                    .send(player, false);
+            return 0;
         }
 
-        new Message(target.getName().getString() + " is not in your faction").format(Formatting.RED)
-                .send(player, false);
-        return 0;
+        Faction actorFaction = actor.getFaction();
+        Faction targetFaction = targetUser.getFaction();
+        if (actorFaction == null || !actorFaction.getID().equals(targetFaction.getID())) {
+            new Message(target.getName().getString() + " is not in your faction").format(Formatting.RED)
+                    .send(player, false);
+            return 0;
+        }
+
+        if (actor.rank != User.Rank.OWNER && realUser.getSpoof() == null) {
+            new Message("Only the faction owner can transfer ownership").fail().send(player, false);
+            return 0;
+        }
+
+        targetUser.rank = User.Rank.OWNER;
+        actor.rank = User.Rank.LEADER;
+
+        context.getSource().getServer().getPlayerManager().sendCommandTree(player);
+        context.getSource().getServer().getPlayerManager().sendCommandTree(target);
+
+        new Message("Transferred ownership to " + target.getName().getString())
+                .prependFaction(actorFaction).send(player, false);
+
+        return 1;
+    }
+
+    private static boolean canActAsLeader(ServerCommandSource source) {
+        return Requires.isLeader().test(source);
+    }
+
+    private static boolean canTransfer(ServerCommandSource source) {
+        return Requires.isOwner().test(source);
     }
 
     public LiteralCommandNode<ServerCommandSource> getNode() {
-        return CommandManager.literal("rank").requires(Requires.isLeader())
+        return CommandManager.literal("rank").requires(RankCommand::canActAsLeader)
                 .then(CommandManager.literal("promote")
                         .requires(Requires.hasPerms("factions.rank.promote", 0))
                         .then(CommandManager.argument("player", EntityArgumentType.player())
@@ -162,7 +195,7 @@ public class RankCommand implements Command {
                                 .executes(this::demote)))
                 .then(CommandManager.literal("transfer")
                         .requires(Requires.multiple(Requires.hasPerms("factions.rank.transfer", 0),
-                                Requires.isOwner()))
+                                RankCommand::canTransfer))
                         .then(CommandManager.argument("player", EntityArgumentType.player())
                                 .executes(this::transfer)))
                 .build();
