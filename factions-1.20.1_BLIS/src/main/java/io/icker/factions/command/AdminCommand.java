@@ -104,6 +104,9 @@ public class AdminCommand implements Command {
 
         user.setSpoof(target);
 
+        // Re-send command tree so requires (e.g. /f rank transfer) use the spoofed identity
+        source.getServer().getPlayerManager().sendCommandTree(player);
+
         new Message("Set spoof to player %s", name).send(player, false);
 
         return 1;
@@ -117,6 +120,8 @@ public class AdminCommand implements Command {
         User user = User.get(player.getUuid());
 
         user.setSpoof(null);
+
+        source.getServer().getPlayerManager().sendCommandTree(player);
 
         new Message("Cleared spoof").send(player, false);
 

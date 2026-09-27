@@ -1,6 +1,9 @@
 package io.icker.factions.command;
 
+import java.util.Optional;
 import java.util.UUID;
+import com.mojang.authlib.GameProfile;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.LiteralCommandNode;
@@ -129,23 +132,39 @@ public class RankCommand implements Command {
 
     private int transfer(CommandContext<ServerCommandSource> context)
             throws CommandSyntaxException {
-        ServerPlayerEntity target = EntityArgumentType.getPlayer(context, "player");
-
         ServerCommandSource source = context.getSource();
         ServerPlayerEntity player = source.getPlayerOrThrow();
+
+        String name = StringArgumentType.getString(context, "player");
 
         User realUser = User.get(player.getUuid());
         User actor = Command.getUser(player);
 
-        if (target.getUuid().equals(player.getUuid()) || target.getUuid().equals(actor.getID())) {
+        User targetUser;
+        String targetName;
+        Optional<GameProfile> profile;
+        if ((profile = source.getServer().getUserCache().findByName(name)).isPresent()) {
+            targetUser = User.get(profile.get().getId());
+            targetName = profile.get().getName();
+        } else {
+            try {
+                targetUser = User.get(UUID.fromString(name));
+                targetName = name;
+            } catch (Exception e) {
+                new Message("No such player %s!", name).format(Formatting.RED)
+                        .send(player, false);
+                return 0;
+            }
+        }
+
+        if (targetUser.getID().equals(player.getUuid()) || targetUser.getID().equals(actor.getID())) {
             new Message("You cannot transfer ownership to yourself").format(Formatting.RED)
                     .send(player, false);
             return 0;
         }
 
-        User targetUser = User.get(target.getUuid());
         if (!targetUser.isInFaction()) {
-            new Message(target.getName().getString() + " is not in your faction").format(Formatting.RED)
+            new Message(targetName + " is not in your faction").format(Formatting.RED)
                     .send(player, false);
             return 0;
         }
@@ -153,7 +172,7 @@ public class RankCommand implements Command {
         Faction actorFaction = actor.getFaction();
         Faction targetFaction = targetUser.getFaction();
         if (actorFaction == null || !actorFaction.getID().equals(targetFaction.getID())) {
-            new Message(target.getName().getString() + " is not in your faction").format(Formatting.RED)
+            new Message(targetName + " is not in your faction").format(Formatting.RED)
                     .send(player, false);
             return 0;
         }
@@ -167,9 +186,14 @@ public class RankCommand implements Command {
         actor.rank = User.Rank.LEADER;
 
         context.getSource().getServer().getPlayerManager().sendCommandTree(player);
-        context.getSource().getServer().getPlayerManager().sendCommandTree(target);
 
-        new Message("Transferred ownership to " + target.getName().getString())
+        ServerPlayerEntity targetPlayer =
+                source.getServer().getPlayerManager().getPlayer(targetUser.getID());
+        if (targetPlayer != null) {
+            targetPlayer.getServer().getPlayerManager().sendCommandTree(targetPlayer);
+        }
+
+        new Message("Transferred ownership to " + targetName)
                 .prependFaction(actorFaction).send(player, false);
 
         return 1;
@@ -196,7 +220,8 @@ public class RankCommand implements Command {
                 .then(CommandManager.literal("transfer")
                         .requires(Requires.multiple(Requires.hasPerms("factions.rank.transfer", 0),
                                 RankCommand::canTransfer))
-                        .then(CommandManager.argument("player", EntityArgumentType.player())
+                        .then(CommandManager.argument("player", StringArgumentType.string())
+                                .suggests(Suggests.allPlayersInYourFactionButYou())
                                 .executes(this::transfer)))
                 .build();
     }

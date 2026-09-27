@@ -211,30 +211,37 @@ public class InteractionManager {
         // Check if block is in a blacklisted dimension
         if (isDimensionBlacklisted(player, pos, world)) {
             InteractionsUtil.warn(player, InteractionsUtilActions.BREAK_BLOCKS);
+            applyBreakPenalty(player, pos, world, false);
             return false;
         }
-        
+
         // Check if block is blacklisted by the claiming faction
         if (isBlockBlacklisted(player, pos, world, blockId)) {
             InteractionsUtil.warn(player, InteractionsUtilActions.BREAK_BLOCKS);
+            applyBreakPenalty(player, pos, world, false);
             return false;
         }
-        
+
         boolean result =
                 checkPermissions(player, pos, world, Permissions.BREAK_BLOCKS) == ActionResult.FAIL;
         if (result) {
             InteractionsUtil.warn(player, InteractionsUtilActions.BREAK_BLOCKS);
-            applyBreakPenalty(player, pos, world);
+            applyBreakPenalty(player, pos, world, true);
         }
         return !result;
     }
 
     /**
      * True only when the block is inside another faction's claim and the player
-     * fails the BREAK_BLOCKS permission check. Own-faction, wilderness, bypass,
-     * and blacklist-only denials are not penalized.
+     * fails the BREAK_BLOCKS permission check. Own-faction, wilderness, and bypass
+     * are not penalized. Blacklist denials pass requirePermissionFail=false.
      */
     public static boolean shouldApplyBreakPenalty(PlayerEntity player, BlockPos pos, World world) {
+        return shouldApplyBreakPenalty(player, pos, world, true);
+    }
+
+    private static boolean shouldApplyBreakPenalty(PlayerEntity player, BlockPos pos, World world,
+            boolean requirePermissionFail) {
         if (world.isClient() || !FactionsMod.CONFIG.CLAIM_PROTECTION) return false;
         if (FactionsMod.CONFIG.BREAK_PENALTY == null || !FactionsMod.CONFIG.BREAK_PENALTY.ENABLED)
             return false;
@@ -250,6 +257,7 @@ public class InteractionManager {
         Faction claimFaction = claim.getFaction();
         if (claimFaction == null) return false;
 
+        // Only another faction (or factionless) is penalized
         if (user.isInFaction()) {
             Faction userFaction = user.getFaction();
             if (userFaction != null && userFaction.getID().equals(claimFaction.getID())) {
@@ -257,11 +265,14 @@ public class InteractionManager {
             }
         }
 
+        if (!requirePermissionFail) return true;
+
         return checkPermissions(player, pos, world, Permissions.BREAK_BLOCKS) == ActionResult.FAIL;
     }
 
-    private static void applyBreakPenalty(PlayerEntity player, BlockPos pos, World world) {
-        if (!shouldApplyBreakPenalty(player, pos, world)) return;
+    private static void applyBreakPenalty(PlayerEntity player, BlockPos pos, World world,
+            boolean requirePermissionFail) {
+        if (!shouldApplyBreakPenalty(player, pos, world, requirePermissionFail)) return;
 
         var penalty = FactionsMod.CONFIG.BREAK_PENALTY;
 
