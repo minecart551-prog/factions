@@ -42,9 +42,9 @@ public class DimensionBlacklistRenderer {
     private static final Color BLACKLIST_GREEN = new Color(0, 255, 0);
     private static final Color WHITELIST_WHITE = new Color(255, 255, 255);
     private static final Color DELETE_RED = new Color(255, 0, 0);
-    private static final Color SELECTION_GREEN = new Color(0, 255, 0);
-    private static final Color SELECTION_WHITE = new Color(255, 255, 255);
+    private static final Color PENDING_YELLOW = new Color(255, 255, 0);
     private static final int FILL_ALPHA = 45;
+    private static final int SELECTED_ALPHA = 65;
     private static final int WIREFRAME_ALPHA = 200;
 
     private DimensionBlacklistRenderer() {}
@@ -129,8 +129,7 @@ public class DimensionBlacklistRenderer {
             }
         }
 
-        // Selection box with preview and wireframe
-        Color selectionColor = selectionMgr.isWhitelistMode() ? SELECTION_WHITE : SELECTION_GREEN;
+        // Pending selection preview (yellow, like leukocyte): hover box, corner box, or final box
         BlockPos firstPos = selectionMgr.getFirstPos();
         BlockPos previewPos = selectionMgr.getPreviewPos();
         BlockPos secondPos = selectionMgr.getSecondPos();
@@ -142,8 +141,8 @@ public class DimensionBlacklistRenderer {
                 int maxX = Math.max(firstPos.getX(), secondPos.getX()) + 1;
                 int maxY = Math.max(firstPos.getY(), secondPos.getY()) + 1;
                 int maxZ = Math.max(firstPos.getZ(), secondPos.getZ()) + 1;
-                renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, selectionColor, FILL_ALPHA);
-                renderWireframeBox(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, selectionColor, WIREFRAME_ALPHA);
+                renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, PENDING_YELLOW, SELECTED_ALPHA);
+                renderWireframeBox(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, PENDING_YELLOW, WIREFRAME_ALPHA);
             } else if (previewPos != null) {
                 int minX = Math.min(firstPos.getX(), previewPos.getX());
                 int minY = Math.min(firstPos.getY(), previewPos.getY());
@@ -151,15 +150,22 @@ public class DimensionBlacklistRenderer {
                 int maxX = Math.max(firstPos.getX(), previewPos.getX()) + 1;
                 int maxY = Math.max(firstPos.getY(), previewPos.getY()) + 1;
                 int maxZ = Math.max(firstPos.getZ(), previewPos.getZ()) + 1;
-                renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, selectionColor, FILL_ALPHA);
-                renderWireframeBox(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, selectionColor, WIREFRAME_ALPHA);
+                renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, PENDING_YELLOW, SELECTED_ALPHA);
+                renderWireframeBox(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, PENDING_YELLOW, WIREFRAME_ALPHA);
             } else {
                 int x = firstPos.getX();
                 int y = firstPos.getY();
                 int z = firstPos.getZ();
-                renderBoxAsFilledQuads(buildCtx, x, y, z, x + 1, y + 1, z + 1, selectionColor, FILL_ALPHA);
-                renderWireframeBox(buildCtx, x, y, z, x + 1, y + 1, z + 1, selectionColor, WIREFRAME_ALPHA);
+                renderBoxAsFilledQuads(buildCtx, x, y, z, x + 1, y + 1, z + 1, PENDING_YELLOW, SELECTED_ALPHA);
+                renderWireframeBox(buildCtx, x, y, z, x + 1, y + 1, z + 1, PENDING_YELLOW, WIREFRAME_ALPHA);
             }
+        } else if (previewPos != null && !selectionMgr.isDeleteMode()) {
+            // Hover highlight at the target block before any corner is set
+            int x = previewPos.getX();
+            int y = previewPos.getY();
+            int z = previewPos.getZ();
+            renderBoxAsFilledQuads(buildCtx, x, y, z, x + 1, y + 1, z + 1, PENDING_YELLOW, SELECTED_ALPHA);
+            renderWireframeBox(buildCtx, x, y, z, x + 1, y + 1, z + 1, PENDING_YELLOW, WIREFRAME_ALPHA);
         }
 
         // Delete mode box with wireframe
@@ -174,7 +180,17 @@ public class DimensionBlacklistRenderer {
                     int maxX = Math.max(delFirstPos.getX(), delSecondPos.getX()) + 1;
                     int maxY = Math.max(delFirstPos.getY(), delSecondPos.getY()) + 1;
                     int maxZ = Math.max(delFirstPos.getZ(), delSecondPos.getZ()) + 1;
-                    renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, DELETE_RED, FILL_ALPHA);
+                    renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, DELETE_RED, SELECTED_ALPHA);
+                    renderWireframeBox(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, DELETE_RED, WIREFRAME_ALPHA);
+                } else if (previewPos != null) {
+                    // Live preview of the pending delete box, like the add-shape preview
+                    int minX = Math.min(delFirstPos.getX(), previewPos.getX());
+                    int minY = Math.min(delFirstPos.getY(), previewPos.getY());
+                    int minZ = Math.min(delFirstPos.getZ(), previewPos.getZ());
+                    int maxX = Math.max(delFirstPos.getX(), previewPos.getX()) + 1;
+                    int maxY = Math.max(delFirstPos.getY(), previewPos.getY()) + 1;
+                    int maxZ = Math.max(delFirstPos.getZ(), previewPos.getZ()) + 1;
+                    renderBoxAsFilledQuads(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, DELETE_RED, SELECTED_ALPHA);
                     renderWireframeBox(buildCtx, minX, minY, minZ, maxX, maxY, maxZ, DELETE_RED, WIREFRAME_ALPHA);
                 } else {
                     int x = delFirstPos.getX();

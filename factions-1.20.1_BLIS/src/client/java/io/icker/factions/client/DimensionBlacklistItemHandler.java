@@ -9,8 +9,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.text.Text;
 import net.minecraft.item.Item;
 
@@ -97,18 +96,16 @@ public class DimensionBlacklistItemHandler {
             mc.player.sendMessage(Text.of("§a" + toolName.substring(0,1).toUpperCase() + toolName.substring(1) + " region created"), true);
         }
 
-        if (selectionStep == 1 && selectionMgr.getFirstPos() != null) {
-            BlockPos cursor = getTargetPos(mc);
-            BlockPos prev = selectionMgr.getPreviewPos();
-            if (cursor != null) {
-                if (!cursor.equals(prev)) {
-                    selectionMgr.setPreviewPos(cursor);
-                    DimensionBlacklistRenderer.getInstance().markNeedsRebuild();
-                }
-            } else if (prev != null) {
-                selectionMgr.setPreviewPos(null);
+        BlockPos cursor = getTargetPos(mc);
+        BlockPos prev = selectionMgr.getPreviewPos();
+        if (cursor != null) {
+            if (!cursor.equals(prev)) {
+                selectionMgr.setPreviewPos(cursor);
                 DimensionBlacklistRenderer.getInstance().markNeedsRebuild();
             }
+        } else if (prev != null) {
+            selectionMgr.setPreviewPos(null);
+            DimensionBlacklistRenderer.getInstance().markNeedsRebuild();
         }
 
         boolean leftClickPressed = mc.options.attackKey.isPressed();
@@ -139,10 +136,8 @@ public class DimensionBlacklistItemHandler {
             io.icker.factions.client.network.UserClientSyncHandler.getCachedUserData();
         if (!userData.canEditDimensions) return;
         
-        if (mc.crosshairTarget == null || mc.crosshairTarget.getType() != HitResult.Type.BLOCK) return;
-
-        BlockHitResult blockHit = (BlockHitResult) mc.crosshairTarget;
-        BlockPos pos = blockHit.getBlockPos();
+        BlockPos pos = getTargetPos(mc);
+        if (pos == null) return;
         String worldKey = mc.world.getRegistryKey().getValue().toString();
         SelectionManager selectionMgr = SelectionManager.getInstance();
         
@@ -165,10 +160,8 @@ public class DimensionBlacklistItemHandler {
             io.icker.factions.client.network.UserClientSyncHandler.getCachedUserData();
         if (!userData.canEditDimensions) return;
         
-        if (mc.crosshairTarget == null || mc.crosshairTarget.getType() != HitResult.Type.BLOCK) return;
-
-        BlockHitResult blockHit = (BlockHitResult) mc.crosshairTarget;
-        BlockPos pos = blockHit.getBlockPos();
+        BlockPos pos = getTargetPos(mc);
+        if (pos == null) return;
         String worldKey = mc.world.getRegistryKey().getValue().toString();
         SelectionManager selectionMgr = SelectionManager.getInstance();
         
@@ -177,8 +170,11 @@ public class DimensionBlacklistItemHandler {
     }
 
     private static BlockPos getTargetPos(MinecraftClient mc) {
-        if (mc.crosshairTarget == null || mc.crosshairTarget.getType() != HitResult.Type.BLOCK) return null;
-        return ((BlockHitResult) mc.crosshairTarget).getBlockPos();
+        if (mc.player == null) return null;
+        Vec3d eyePos = mc.player.getEyePos();
+        Vec3d lookVec = mc.player.getRotationVec(1.0F);
+        Vec3d target = eyePos.add(lookVec.multiply(3.0));
+        return BlockPos.ofFloored(target.x, target.y, target.z);
     }
 
     private static void onWorldRenderLast(net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext context) {

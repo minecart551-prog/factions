@@ -161,6 +161,9 @@ public class Faction {
     @Field("ActiveBlessingsJson")
     private String activeBlessingsJson = "[]";
 
+    @Field("RecentRaiders")
+    private ArrayList<RaidRecord> recentRaiders = new ArrayList<>();
+
     private static final Gson GSON = new Gson();
 
     private static double roundMoney(double value) {
@@ -288,6 +291,26 @@ public class Faction {
         if (lastSacrifice == 0) return -1;
         long now = System.currentTimeMillis();
         return (now - lastSacrifice) / (1000L * 60 * 60 * 24);
+    }
+
+    public List<RaidRecord> getRecentRaiders() {
+        if (recentRaiders == null) recentRaiders = new ArrayList<>();
+        return List.copyOf(recentRaiders);
+    }
+
+    public void recordRaider(UUID attackerId) {
+        if (attackerId == null || attackerId.equals(id)) return;
+        if (recentRaiders == null) recentRaiders = new ArrayList<>();
+
+        if (!recentRaiders.isEmpty() && recentRaiders.get(0).factionId.equals(attackerId)) {
+            recentRaiders.get(0).time = System.currentTimeMillis();
+            return;
+        }
+
+        recentRaiders.removeIf(r -> attackerId.equals(r.factionId));
+        recentRaiders.add(0, new RaidRecord(attackerId, System.currentTimeMillis()));
+        while (recentRaiders.size() > 5) recentRaiders.remove(recentRaiders.size() - 1);
+        save();
     }
 
     public int getWarPower() {

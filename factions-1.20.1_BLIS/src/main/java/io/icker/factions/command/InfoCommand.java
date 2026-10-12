@@ -280,6 +280,36 @@ public class InfoCommand implements Command {
                 + faction.getEnemiesWith().size() + Formatting.RED + "): ").add(enemiesWith)
                         .send(player, false);
 
+        // Show previous factions that attempted to raid this faction
+        List<io.icker.factions.api.persistents.RaidRecord> raiders = faction.getRecentRaiders();
+        if (!raiders.isEmpty()) {
+            MutableText raiderHover = Text.empty();
+            String raiderList = raiders.stream().map(record -> {
+                Faction raider = Faction.get(record.factionId);
+                if (raider == null) return null;
+                return raider.getColor() + raider.getName() + Formatting.GRAY;
+            }).filter(java.util.Objects::nonNull).collect(Collectors.joining(Formatting.GRAY + ", "));
+            long now = System.currentTimeMillis();
+            for (int i = 0; i < raiders.size(); i++) {
+                var record = raiders.get(i);
+                Faction raider = Faction.get(record.factionId);
+                if (raider == null) continue;
+                if (i > 0) raiderHover.append("\n");
+                long secondsAgo = (now - record.time) / 1000;
+                String when = secondsAgo < 60 ? secondsAgo + "s ago"
+                        : secondsAgo < 3600 ? (secondsAgo / 60) + "m ago"
+                        : secondsAgo < 86400 ? (secondsAgo / 3600) + "h ago"
+                        : (secondsAgo / 86400) + "d ago";
+                raiderHover.append(Text.literal(raider.getName() + ": ").formatted(raider.getColor()))
+                        .append(Text.literal(when).formatted(Formatting.GRAY));
+            }
+            if (!raiderList.isEmpty()) {
+                new Message(Formatting.DARK_RED + "Recent Raiders (" + Formatting.WHITE + raiders.size()
+                        + Formatting.DARK_RED + "): ").add(raiderList)
+                        .hover(raiderHover).send(player, false);
+            }
+        }
+
         // Add compat config info
         String compatLevel = FactionsMod.CONFIG.RELATIONSHIPS.COMPAT_SKILL_DAMAGE_PROTECTION_FOR.toString();
         new Message(Formatting.GRAY + "Compatibility Settings:")

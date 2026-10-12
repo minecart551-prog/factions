@@ -283,6 +283,9 @@ public class InteractionManager {
         Faction claimFaction = claim != null ? claim.getFaction() : null;
         User breaker = User.get(player.getUuid());
         Faction attackerFaction = breaker != null && breaker.isInFaction() ? breaker.getFaction() : null;
+        if (claimFaction != null && attackerFaction != null && !attackerFaction.getID().equals(claimFaction.getID())) {
+            claimFaction.recordRaider(attackerFaction.getID());
+        }
         double charged = 0;
         double earned = 0;
         if (penalty.BANK_COST_PER_BLOCK > 0 && claimFaction != null) {
@@ -660,27 +663,34 @@ public class InteractionManager {
             return allowed ? ActionResult.SUCCESS : ActionResult.FAIL;
         }
 
+        // Raised claim access must not block block interaction: for USE_BLOCKS the
+        // access gate behaves as if accessLevel were MEMBER, so only the permission
+        // lists (member/guest/relationship/player override) decide. All other
+        // permissions (BREAK/PLACE/USE_INVENTORIES/ATTACK_*) keep the real accessLevel.
+        User.Rank effectiveAccess =
+                permission == Permissions.USE_BLOCKS ? User.Rank.MEMBER : claim.accessLevel;
+
         if (claimFaction.getID().equals(userFaction.getID())) {
             // Leadership ranks always bypass member_permissions
             if (user.rank == User.Rank.OWNER || user.rank == User.Rank.LEADER || user.rank == User.Rank.COMMANDER) {
-                boolean rankOk = getRankLevel(claim.accessLevel) <= getRankLevel(user.rank);
+                boolean rankOk = getRankLevel(effectiveAccess) <= getRankLevel(user.rank);
                 if (dbg) FactionsMod.LOGGER.info("{}own faction leadership, rank={} accessLevel={} rankOk={} -> {}",
-                        prefix, user.rank, claim.accessLevel, rankOk, rankOk ? "SUCCESS" : "FAIL");
+                        prefix, user.rank, effectiveAccess, rankOk, rankOk ? "SUCCESS" : "FAIL");
                 return rankOk ? ActionResult.SUCCESS : ActionResult.FAIL;
             }
-            
+
             // For MEMBER rank, check member_permissions
             if (user.rank == User.Rank.MEMBER) {
-                boolean allowed = getRankLevel(claim.accessLevel) <= getRankLevel(user.rank)
+                boolean allowed = getRankLevel(effectiveAccess) <= getRankLevel(user.rank)
                         && claimFaction.member_permissions.contains(permission);
                 if (dbg) FactionsMod.LOGGER.info("{}own faction member, perm={} member_perms_allow={} -> {}",
                         prefix, permission, allowed, allowed ? "SUCCESS" : "FAIL");
                 return allowed ? ActionResult.SUCCESS : ActionResult.FAIL;
             }
-            
+
             // Guest in own faction - check guest_permissions (for member-access claims)
             boolean guestOk = claimFaction.guest_permissions.contains(permission)
-                    && claim.accessLevel == User.Rank.MEMBER;
+                    && effectiveAccess == User.Rank.MEMBER;
             if (dbg) FactionsMod.LOGGER.info("{}own faction guest, guestOk={} -> {}",
                     prefix, guestOk, guestOk ? "SUCCESS" : "FAIL");
             return guestOk ? ActionResult.SUCCESS : ActionResult.FAIL;
@@ -688,7 +698,7 @@ public class InteractionManager {
 
         if (FactionsMod.CONFIG.RELATIONSHIPS.ALLY_OVERRIDES_PERMISSIONS
                 && claimFaction.isMutualAllies(userFaction.getID())
-                && claim.accessLevel == User.Rank.MEMBER) {
+                && effectiveAccess == User.Rank.MEMBER) {
             if (dbg) FactionsMod.LOGGER.info("{}ally_overrides_permissions + mutual ally -> SUCCESS", prefix);
             return ActionResult.SUCCESS;
         }
@@ -709,7 +719,7 @@ public class InteractionManager {
             }
         }
 
-        if (rel.permissions.contains(permission) && claim.accessLevel == User.Rank.MEMBER) {
+        if (rel.permissions.contains(permission) && effectiveAccess == User.Rank.MEMBER) {
             if (dbg) FactionsMod.LOGGER.info("{}rel={} explicit={} has perm -> SUCCESS",
                     prefix, rel.status, hasExplicit);
             return ActionResult.SUCCESS;
