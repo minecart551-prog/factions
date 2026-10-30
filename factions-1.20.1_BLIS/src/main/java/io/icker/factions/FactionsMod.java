@@ -86,6 +86,7 @@ public class FactionsMod implements ModInitializer {
         
         // Register network handlers
         io.icker.factions.network.DimensionNetworkHandler.registerHandlers();
+        io.icker.factions.network.ClaimNetworkHandler.register();
 
         CommandRegistrationCallback.EVENT.register(FactionsMod::registerCommands);
     }

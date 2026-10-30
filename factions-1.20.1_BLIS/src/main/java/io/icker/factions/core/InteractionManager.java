@@ -431,6 +431,19 @@ public class InteractionManager {
         ItemStack stack = player.getStackInHand(hand);
 
         BlockPos hitPos = hitResult.getBlockPos();
+
+        // Block the Yuushya modelling tools (Gourd of Entitilization / GUI tool), which place or
+        // modify show blocks, wherever break or place is denied. Admin bypass is handled inside checkPermissions.
+        if (hand == Hand.MAIN_HAND && isModellingTool(stack)) {
+            boolean breakDenied = checkPermissions(player, hitPos, world, Permissions.BREAK_BLOCKS) == ActionResult.FAIL;
+            boolean placeDenied = checkPermissions(player, hitPos, world, Permissions.PLACE_BLOCKS) == ActionResult.FAIL;
+            if (breakDenied || placeDenied) {
+                InteractionsUtil.warn(player, breakDenied ? InteractionsUtilActions.BREAK_BLOCKS : InteractionsUtilActions.PLACE_BLOCKS);
+                InteractionsUtil.sync(player, stack, hand);
+                return ActionResult.FAIL;
+            }
+        }
+
         String blockId = Registries.BLOCK.getId(world.getBlockState(hitPos).getBlock()).toString();
         if (isBlockExempt(blockId)) return ActionResult.PASS;
 
@@ -764,6 +777,14 @@ public class InteractionManager {
             if (idMatchesPattern(id, pattern)) return true;
         }
         return false;
+    }
+
+    // Yuushya modelling tools that place/modify show blocks. Identified by registry id so factions
+    // needs no hard dependency on the modelling mod (an absent mod simply never matches).
+    private static boolean isModellingTool(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return false;
+        String id = Registries.ITEM.getId(stack.getItem()).toString();
+        return id.equals("yuushya:get_showblock_item") || id.equals("yuushya:gui_item");
     }
 
     private static boolean isBlockExempt(String blockId) {
