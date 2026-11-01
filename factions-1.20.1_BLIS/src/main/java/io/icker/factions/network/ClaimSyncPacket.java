@@ -23,6 +23,7 @@ import net.minecraft.util.Formatting;
  *     {
  *       "name": String,
  *       "description": String,
+ *       "power": int, "members": int,
  *       "color": int (0xRRGGBB, -1 when the faction has no color),
  *       "homeLevel": String, "homeX": double, "homeZ": double   // absent when no home
  *       "claims": [
@@ -54,6 +55,9 @@ public class ClaimSyncPacket {
 
             String description = faction.getDescription();
             factionTag.putString("description", description != null ? description : "");
+
+            factionTag.putInt("power", faction.getPower());
+            factionTag.putInt("members", faction.getUsers().size());
 
             Formatting color = faction.getColor();
             Integer rgb = color != null ? color.getColorValue() : null;
